@@ -174,6 +174,8 @@ Add new native capabilities in this order:
 3. Gate privileged commands in main process logic so remote pages cannot access local filesystem or shell capabilities.
 4. Keep shared UI runtime contracts in `packages/ui` and server/runtime APIs in `packages/web` when the behavior is not inherently native.
 
+`desktop_fetch_sub2api_quota` is safe for remote pages because it accepts no input, uses only the locally stored credential, and returns a redacted quota result.
+
 ## Logs And Data
 
 Electron uses `electron-log`. In development, console logs are also visible in the terminal. In packaged apps, logs are written through the platform log path for the `OpenChamber` app name.

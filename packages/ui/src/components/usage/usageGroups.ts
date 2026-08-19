@@ -1,6 +1,6 @@
 import React from 'react';
 import { useI18n } from '@/lib/i18n';
-import { formatWindowLabel, QUOTA_PROVIDERS } from '@/lib/quota';
+import { formatWindowLabel, getVisibleQuotaProviders } from '@/lib/quota';
 import { getDisplayModelName } from '@/lib/quota/model-families';
 import { useQuotaStore } from '@/stores/useQuotaStore';
 import type { QuotaProviderId, UsageWindow } from '@/types';
@@ -39,7 +39,7 @@ export const useUsageProviderGroups = (): UsageProviderGroup[] => {
 
   return React.useMemo<UsageProviderGroup[]>(() => {
     const resultsByProvider = new Map(quotaResults.map((result) => [result.providerId, result]));
-    return QUOTA_PROVIDERS
+    return getVisibleQuotaProviders()
       .filter((providerMeta) => dropdownProviderIds.includes(providerMeta.id))
       .filter((providerMeta) => resultsByProvider.get(providerMeta.id)?.configured === true)
       .map((providerMeta) => {

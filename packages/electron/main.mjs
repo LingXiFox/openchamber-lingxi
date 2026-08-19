@@ -33,6 +33,7 @@ import {
 import { unsupportedAppSpecificOpenError, validateLocalPath } from './path-open-utils.mjs';
 import { shouldAllowBrowserPanelCertificateError } from './browser-panel-security.mjs';
 import { mintOutsideFileGrant } from '@openchamber/web/server/lib/fs/routes.js';
+import { fetchQuota as fetchSub2ApiQuota } from '@openchamber/web/server/lib/quota/providers/sub2api.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -3753,6 +3754,9 @@ const closeAllDevTunnels = () => {
 
 const handleInvoke = async (browserWindow, command, args = {}) => {
   switch (command) {
+    case 'desktop_fetch_sub2api_quota':
+      return fetchSub2ApiQuota();
+
     case 'desktop_start_window_drag':
       return null;
 
@@ -4991,6 +4995,8 @@ const isLocalSender = (webContents) => {
 };
 
 const COMMANDS_SAFE_FOR_REMOTE = new Set([
+  // Uses only the locally stored credential and returns a redacted quota result.
+  'desktop_fetch_sub2api_quota',
   'desktop_hosts_get',
   'desktop_host_probe',
   'desktop_new_window',

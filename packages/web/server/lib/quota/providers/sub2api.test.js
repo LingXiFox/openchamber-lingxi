@@ -1,5 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { calculateNetRechargeTotal, calculateRemainingPercent, fetchQuota } from './sub2api.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { writeManagedCredential } from '../credentials/providers.js';
+import { calculateNetRechargeTotal, calculateRemainingPercent, fetchQuota, fetchQuotaWithCredential } from './sub2api.js';
+
+const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'openchamber-sub2api-'));
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -7,6 +13,7 @@ afterEach(() => {
 });
 
 const configureProvider = () => {
+  vi.stubEnv('OPENCHAMBER_DATA_DIR', temporaryDirectory);
   vi.stubEnv('SUB2API_BASE_URL', 'https://sub2api.example/');
   vi.stubEnv('SUB2API_ACCESS_TOKEN', 'fake-panel-token');
 };
@@ -72,6 +79,34 @@ describe('Sub2API quota provider', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(3, 'https://sub2api.example/api/v1/payment/orders/my?page=2&page_size=100', expect.any(Object));
   });
 
+  it('returns a redacted result for a supplied panel credential', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ balance: 73.42 }))
+      .mockResolvedValueOnce(response({ items: [{ order_type: 'balance', status: 'COMPLETED', amount: 100 }], total: 1 }));
+
+    const result = await fetchQuotaWithCredential({
+      baseUrl: 'https://sub2api.example/',
+      accessToken: 'panel-jwt',
+    }, fetchMock);
+
+    expect(result.usage.windows.credits.valueLabel).toBe('$73.42 / $100.00');
+    expect(result.usage.windows.credits.remainingPercent).toBeCloseTo(73.42);
+    expect(JSON.stringify(result)).not.toContain('panel-jwt');
+  });
+
+  it('prefers the managed local credential over environment variables', async () => {
+    configureProvider();
+    writeManagedCredential('sub2api', { baseUrl: 'https://local-sub2api.example/', accessToken: 'local-panel-jwt' });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({ balance: 73.42 }))
+      .mockResolvedValueOnce(response({ items: [{ order_type: 'balance', status: 'COMPLETED', amount: 100 }], total: 1 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchQuota();
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, 'https://local-sub2api.example/api/v1/user/profile', expect.any(Object));
+  });
+
   it('keeps a positive balance with no payment orders explicitly unknown', async () => {
     configureProvider();
     vi.stubGlobal('fetch', vi.fn()
@@ -123,3 +158,5 @@ describe('Sub2API quota provider', () => {
     expect((await fetchQuota()).error).toBe('Invalid response from provider');
   });
 });
+
+afterAll(() => fs.rmSync(temporaryDirectory, { recursive: true, force: true }));

@@ -1,4 +1,4 @@
-export { QUOTA_PROVIDERS } from './providers';
+export { getVisibleQuotaProviders, QUOTA_PROVIDERS } from './providers';
 export {
   clampPercent,
   formatQuotaValueLabel,

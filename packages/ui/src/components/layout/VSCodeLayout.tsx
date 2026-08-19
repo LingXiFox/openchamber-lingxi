@@ -32,7 +32,7 @@ import { toast } from '@/components/ui';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { UsageProgressBar } from '@/components/sections/usage/UsageProgressBar';
 import { Icon } from "@/components/icon/Icon";
-import { formatQuotaValueLabel, formatQuotaResetLabel, formatWindowLabel, QUOTA_PROVIDERS } from '@/lib/quota';
+import { formatQuotaValueLabel, formatQuotaResetLabel, formatWindowLabel, getVisibleQuotaProviders } from '@/lib/quota';
 import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { formatTimeForPreference } from '@/lib/timeFormat';
@@ -788,7 +788,7 @@ const VSCodeHeader: React.FC<VSCodeHeaderProps> = ({ title, showBack, onBack, on
       error?: string;
     }> = [];
 
-    for (const provider of QUOTA_PROVIDERS) {
+    for (const provider of getVisibleQuotaProviders()) {
       if (!dropdownProviderIds.includes(provider.id)) {
         continue;
       }

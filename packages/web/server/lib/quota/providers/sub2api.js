@@ -1,4 +1,5 @@
-import { asNonEmptyString, asObject, buildResult, formatMoney, toNumber, toUsageWindow } from '../utils/index.js';
+import { asObject, buildResult, formatMoney, toNumber, toUsageWindow } from '../utils/index.js';
+import { normalizers, readManagedCredential } from '../credentials/providers.js';
 
 export const providerId = 'sub2api';
 export const providerName = 'Sub2API';
@@ -9,31 +10,11 @@ const PAGE_SIZE = 100;
 const AUTHENTICATION_ERROR = 'Sub2API authentication expired or invalid';
 const INVALID_RESPONSE_ERROR = 'Invalid response from provider';
 
-const normalizeBaseUrl = (raw) => {
-  const value = asNonEmptyString(raw);
-  if (!value) return null;
-
-  try {
-    const url = new URL(value);
-    if (
-      (url.protocol !== 'http:' && url.protocol !== 'https:') ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    ) {
-      return null;
-    }
-    return url.toString().replace(/\/+$/, '');
-  } catch {
-    return null;
-  }
-};
-
 const getConfiguration = () => {
-  const baseUrl = normalizeBaseUrl(process.env.SUB2API_BASE_URL);
-  const accessToken = asNonEmptyString(process.env.SUB2API_ACCESS_TOKEN);
-  return baseUrl && accessToken ? { baseUrl, accessToken } : null;
+  return readManagedCredential(providerId) ?? normalizers.sub2api({
+    baseUrl: process.env.SUB2API_BASE_URL,
+    accessToken: process.env.SUB2API_ACCESS_TOKEN,
+  });
 };
 
 const getResponseData = (payload) => {
@@ -114,26 +95,30 @@ const getOrderPage = (payload) => {
   return { items: data.items, total };
 };
 
-const fetchOrders = async (baseUrl, accessToken, fetchImpl) => {
-  const orders = [];
+const fetchNetRechargeTotal = async (baseUrl, accessToken, fetchImpl) => {
+  let netRechargeTotal = 0;
+  let received = 0;
   let total = null;
   let page = 1;
 
-  while (total === null || orders.length < total) {
+  while (total === null || received < total) {
     const payload = await requestJson(
       `${baseUrl}/api/v1/payment/orders/my?page=${page}&page_size=${PAGE_SIZE}`,
       accessToken,
       fetchImpl,
     );
     const result = getOrderPage(payload);
-    orders.push(...result.items);
+    const nextNetRechargeTotal = netRechargeTotal + calculateNetRechargeTotal(result.items);
+    if (!Number.isFinite(nextNetRechargeTotal)) throw new Error(INVALID_RESPONSE_ERROR);
+    netRechargeTotal = nextNetRechargeTotal;
+    received += result.items.length;
     total = result.total;
-    if (orders.length >= total) break;
+    if (received >= total) break;
     if (result.items.length === 0) throw new Error('Sub2API orders pagination is incomplete');
     page += 1;
   }
 
-  return orders;
+  return netRechargeTotal;
 };
 
 const formatAmount = (value) => `$${formatMoney(value)}`;
@@ -157,24 +142,23 @@ const toBalanceWindow = (balance, total) => {
   });
 };
 
-const fetchSub2ApiQuota = async (baseUrl, accessToken, fetchImpl = fetch) => {
+const fetchSub2ApiUsage = async (baseUrl, accessToken, fetchImpl = fetch) => {
   const profile = await requestJson(`${baseUrl}/api/v1/user/profile`, accessToken, fetchImpl);
   const balance = getBalance(profile);
-  const orders = await fetchOrders(baseUrl, accessToken, fetchImpl);
-  const total = calculateNetRechargeTotal(orders);
+  const total = await fetchNetRechargeTotal(baseUrl, accessToken, fetchImpl);
   return { windows: { credits: toBalanceWindow(balance, total) } };
 };
 
 export const isConfigured = () => Boolean(getConfiguration());
 
-export const fetchQuota = async () => {
-  const configuration = getConfiguration();
+export const fetchQuotaWithCredential = async (credential, fetchImpl = fetch) => {
+  const configuration = normalizers.sub2api(credential);
   if (!configuration) {
     return buildResult({ providerId, providerName, ok: false, configured: false, error: 'Not configured' });
   }
 
   try {
-    const usage = await fetchSub2ApiQuota(configuration.baseUrl, configuration.accessToken);
+    const usage = await fetchSub2ApiUsage(configuration.baseUrl, configuration.accessToken, fetchImpl);
     return buildResult({ providerId, providerName, ok: true, configured: true, usage });
   } catch (error) {
     const isTimeout = error instanceof DOMException && (
@@ -195,3 +179,10 @@ export const fetchQuota = async () => {
     });
   }
 };
+
+export const validateCredential = async (credential) => {
+  const result = await fetchQuotaWithCredential(credential);
+  if (!result.ok) throw new Error(result.error);
+};
+
+export const fetchQuota = () => fetchQuotaWithCredential(getConfiguration());
