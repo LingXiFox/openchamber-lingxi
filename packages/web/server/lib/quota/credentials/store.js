@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const MANAGED_QUOTA_PROVIDERS = new Set(['ollama-cloud', 'cursor']);
+const MANAGED_QUOTA_PROVIDERS = new Set(['ollama-cloud', 'cursor', 'sub2api']);
 
 const credentialsDirectory = () => path.join(
   process.env.OPENCHAMBER_DATA_DIR

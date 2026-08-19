@@ -19,6 +19,7 @@ import * as kimi from './kimi.js';
 import * as nanogpt from './nanogpt.js';
 import * as openai from './openai.js';
 import * as openrouter from './openrouter.js';
+import * as sub2api from './sub2api.js';
 import * as zai from './zai.js';
 import * as zhipuaiCodingPlan from './zhipuai-coding-plan.js';
 import * as minimaxCodingPlan from './minimax-coding-plan.js';
@@ -47,6 +48,12 @@ const registry = {
     providerName: codex.providerName,
     isConfigured: codex.isConfigured,
     fetchQuota: codex.fetchQuota
+  },
+  sub2api: {
+    providerId: sub2api.providerId,
+    providerName: sub2api.providerName,
+    isConfigured: sub2api.isConfigured,
+    fetchQuota: sub2api.fetchQuota
   },
   crof: {
     providerId: crof.providerId,

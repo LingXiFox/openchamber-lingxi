@@ -32,7 +32,9 @@ import {
 } from './linux-autostart.mjs';
 import { unsupportedAppSpecificOpenError, validateLocalPath } from './path-open-utils.mjs';
 import { shouldAllowBrowserPanelCertificateError } from './browser-panel-security.mjs';
+import { isLocalIpcSenderUrl } from './ipc-sender-policy.mjs';
 import { mintOutsideFileGrant } from '@openchamber/web/server/lib/fs/routes.js';
+import { fetchQuota as fetchSub2ApiQuota } from '@openchamber/web/server/lib/quota/providers/sub2api.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -3753,6 +3755,9 @@ const closeAllDevTunnels = () => {
 
 const handleInvoke = async (browserWindow, command, args = {}) => {
   switch (command) {
+    case 'desktop_fetch_sub2api_quota':
+      return fetchSub2ApiQuota();
+
     case 'desktop_start_window_drag':
       return null;
 
@@ -4960,35 +4965,23 @@ app.on('web-contents-created', (_event, contents) => {
 // shell.openPath, installed-app scans, app relaunch, and file dialogs
 // are gated to local senders — even the user's own remote UI shouldn't
 // need them, and a compromised remote can't use them either.
-const isLocalSender = (webContents) => {
+const getIpcSenderPolicy = (webContents) => {
+  let rawUrl = '';
   try {
-    const raw = typeof webContents?.getURL === 'function' ? webContents.getURL() : '';
-    if (!raw) return false;
-    const url = new URL(raw);
-    if (url.protocol === `${UI_PROTOCOL}:` && url.hostname === 'app') return true;
-    // Electron dev renders from Vite while the local API is served on a
-    // separate port. This exact loopback HMR origin is trusted only in dev.
-    if (isDev && url.origin === `http://127.0.0.1:${process.env.OPENCHAMBER_HMR_UI_PORT || '5173'}`) return true;
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-    if (state.localOrigin) {
-      try {
-        const allowed = new URL(state.localOrigin);
-        if (allowed.origin === url.origin) return true;
-      } catch {
-      }
-    }
-    if (state.sidecarUrl) {
-      try {
-        const allowed = new URL(state.sidecarUrl);
-        if (allowed.origin === url.origin) return true;
-      } catch {
-      }
-    }
-    return false;
+    rawUrl = typeof webContents?.getURL === 'function' ? webContents.getURL() : '';
   } catch {
-    return false;
   }
+  return {
+    rawUrl,
+    uiProtocol: UI_PROTOCOL,
+    isDev,
+    hmrUiPort: process.env.OPENCHAMBER_HMR_UI_PORT || '5173',
+    localOrigin: state.localOrigin,
+    sidecarUrl: state.sidecarUrl,
+  };
 };
+
+const isLocalSender = (webContents) => isLocalIpcSenderUrl(getIpcSenderPolicy(webContents));
 
 const COMMANDS_SAFE_FOR_REMOTE = new Set([
   'desktop_hosts_get',

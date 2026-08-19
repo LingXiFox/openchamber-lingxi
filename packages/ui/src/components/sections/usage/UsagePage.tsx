@@ -1,7 +1,8 @@
 import React from 'react';
 import { UsageCard } from './UsageCard';
 import { QuotaCredentials } from './QuotaCredentials';
-import { QUOTA_PROVIDERS } from '@/lib/quota';
+import { getVisibleQuotaProviders } from '@/lib/quota';
+import { isElectronShell, isDesktopLocalOriginActive } from '@/lib/desktop';
 import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
@@ -36,6 +37,10 @@ interface ModelInfo {
   windows: UsageWindows;
 }
 
+const isCredentialProvider = (providerId: QuotaProviderId | null): providerId is 'ollama-cloud' | 'cursor' | 'sub2api' => (
+  providerId === 'ollama-cloud' || providerId === 'cursor' || providerId === 'sub2api'
+);
+
 export const UsagePage: React.FC = () => {
   const { t } = useI18n();
   const timeFormatPreference = useUIStore((state) => state.timeFormatPreference);
@@ -52,6 +57,7 @@ export const UsagePage: React.FC = () => {
   const selectedModels = useQuotaStore((state) => state.selectedModels);
   const toggleModelSelected = useQuotaStore((state) => state.toggleModelSelected);
   const applyDefaultSelections = useQuotaStore((state) => state.applyDefaultSelections);
+  const quotaProviders = getVisibleQuotaProviders();
 
   useQuotaAutoRefresh();
 
@@ -68,19 +74,21 @@ export const UsagePage: React.FC = () => {
       return;
     }
     const firstConfigured = results.find((entry) => entry.configured)?.providerId;
-    setSelectedProvider(firstConfigured ?? QUOTA_PROVIDERS[0]?.id ?? null);
-  }, [results, selectedProviderId, setSelectedProvider]);
+    setSelectedProvider(firstConfigured ?? quotaProviders[0]?.id ?? null);
+  }, [results, selectedProviderId, setSelectedProvider, quotaProviders]);
 
   const selectedResult = results.find((entry) => entry.providerId === selectedProviderId) ?? null;
 
-  const providerMeta = QUOTA_PROVIDERS.find((provider) => provider.id === selectedProviderId);
+  const providerMeta = quotaProviders.find((provider) => provider.id === selectedProviderId);
   const providerName = providerMeta?.name ?? selectedProviderId ?? t('settings.usage.sidebar.title');
   const usage = selectedResult?.usage;
   const selectedProviderError = selectedResult?.configured && !selectedResult.ok
     ? selectedResult.error
     : null;
   const showInDropdown = selectedProviderId ? dropdownProviderIds.includes(selectedProviderId) : false;
-  const hasCredentialsForm = selectedProviderId === 'ollama-cloud' || selectedProviderId === 'cursor';
+  const credentialProviderId = isCredentialProvider(selectedProviderId) ? selectedProviderId : null;
+  const hasCredentialsForm = credentialProviderId !== null
+    && (credentialProviderId !== 'sub2api' || !isElectronShell() || isDesktopLocalOriginActive());
   const handleDropdownToggle = React.useCallback((enabled: boolean) => {
     if (!selectedProviderId) {
       return;
@@ -204,8 +212,8 @@ export const UsagePage: React.FC = () => {
         </div>
       )}
 
-      {(selectedProviderId === 'ollama-cloud' || selectedProviderId === 'cursor') && (
-        <QuotaCredentials providerId={selectedProviderId} providerName={providerName} />
+      {hasCredentialsForm && (
+        <QuotaCredentials providerId={credentialProviderId} providerName={providerName} />
       )}
 
       {usage?.windows && Object.keys(usage.windows).length > 0 && (

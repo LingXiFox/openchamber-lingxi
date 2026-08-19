@@ -19,6 +19,7 @@ These provider IDs are currently dispatchable via `fetchQuotaForProvider(provide
 | --- | --- | --- | --- |
 | `claude` | Claude | `providers/claude/` | Claude Code Keychain entry, Claude Code credentials file, OpenCode `auth.json` (`anthropic`, `claude`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | `codex` | Codex | `providers/codex.js` | `openai`, `codex`, `chatgpt` |
+| `sub2api` | Sub2API | `providers/sub2api.js` | Managed local credential, then `SUB2API_BASE_URL` and `SUB2API_ACCESS_TOKEN` |
 | `command-code` | Command Code | `providers/command-code.js` | `command-code` OAuth/API credential in OpenCode `auth.json`, or `COMMAND_CODE_API_KEY` |
 | `cursor` | Cursor | `providers/cursor.js` | Environment/token files, OpenChamber-managed credentials, or explicit one-time Cursor import |
 | `crof` | CrofAI | `providers/crof.js` | `crof` (API key under `key` or `token`) |
@@ -78,6 +79,10 @@ Claude quota reports the subscription limits Claude Code itself is bound by, rea
 5. If needed for direct use, export a named fetcher from `packages/web/server/lib/quota/providers/index.js` and `packages/web/server/lib/quota/index.js`.
 6. Update this file with the new provider ID, module path, and alias/auth details.
 7. Validate with `bun run type-check`, `bun run lint`, and `bun run build`.
+
+## Sub2API quota semantics
+
+Sub2API reads a managed local credential from `~/.config/openchamber/quota/sub2api.json` before falling back to `SUB2API_BASE_URL` and `SUB2API_ACCESS_TOKEN`; the token is a Sub2API panel JWT and is never returned to the UI. Electron calls the provider through local IPC even when displaying a remote runtime, so the JWT is never sent to that runtime. `GET /api/v1/user/profile` supplies the current `balance`. `GET /api/v1/payment/orders/my` is paginated to calculate net balance-recharge total: completed orders contribute `amount`, partial refunds contribute `max(amount - refund_amount, 0)`, and full refunds contribute zero. API keys for model calls cannot authenticate these requests. When non-payment sources leave a positive balance with no payment-order total, the provider reports the total as unknown rather than inventing one. VS Code does not implement or show the Sub2API provider.
 
 ## MiniMax M3 / Token Plan migration
 

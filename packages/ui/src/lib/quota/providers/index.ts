@@ -1,4 +1,5 @@
 import type { QuotaProviderId } from '@/types';
+import { isVSCodeRuntime } from '@/lib/desktop';
 
 export interface QuotaProviderMeta {
   id: QuotaProviderId;
@@ -8,6 +9,7 @@ export interface QuotaProviderMeta {
 export const QUOTA_PROVIDERS: QuotaProviderMeta[] = [
   { id: 'claude', name: 'Claude' },
   { id: 'codex', name: 'Codex' },
+  { id: 'sub2api', name: 'Sub2API' },
   { id: 'command-code', name: 'Command Code' },
   { id: 'cursor', name: 'Cursor' },
   { id: 'github-copilot', name: 'GitHub Copilot' },
@@ -27,3 +29,11 @@ export const QUOTA_PROVIDERS: QuotaProviderMeta[] = [
   { id: 'neuralwatt', name: 'NeuralWatt' },
   { id: 'xai', name: 'xAI' },
 ];
+
+const VSCODE_QUOTA_PROVIDERS = QUOTA_PROVIDERS.filter((provider) => provider.id !== 'sub2api');
+
+export const getVisibleQuotaProviders = (isVSCode = isVSCodeRuntime()): QuotaProviderMeta[] => (
+  isVSCode
+    ? VSCODE_QUOTA_PROVIDERS
+    : QUOTA_PROVIDERS
+);
