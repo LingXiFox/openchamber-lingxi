@@ -59,6 +59,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --base main \
             --state open \
+            --limit 1000 \
             --json title \
             --jq '[.[] | select(.title == "sync: update from upstream OpenChamber")] | length')"
 
@@ -99,13 +100,17 @@ jobs:
         run: |
           set -euo pipefail
 
+          cat > /tmp/upstream-sync-pr-body.md <<EOF
+          Automated downstream sync.
+
+          Upstream contains ${UPSTREAM_COUNT} new commit(s).
+
+          This PR must pass the normal Lingxi CI checks before it can be merged. Merge conflicts are never resolved automatically.
+          EOF
+
           gh pr create \
             --repo "$GITHUB_REPOSITORY" \
             --base main \
             --head "$SYNC_BRANCH" \
             --title "sync: update from upstream OpenChamber" \
-            --body "Automated downstream sync.
-
-          Upstream contains ${UPSTREAM_COUNT} new commit(s).
-
-          This PR must pass the normal Lingxi CI checks before it can be merged. Merge conflicts are never resolved automatically."
+            --body-file /tmp/upstream-sync-pr-body.md
