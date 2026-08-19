@@ -19,6 +19,7 @@ These provider IDs are currently dispatchable via `fetchQuotaForProvider(provide
 | --- | --- | --- | --- |
 | `claude` | Claude | `providers/claude/` | Claude Code Keychain entry, Claude Code credentials file, OpenCode `auth.json` (`anthropic`, `claude`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | `codex` | Codex | `providers/codex.js` | `openai`, `codex`, `chatgpt` |
+| `sub2api` | Sub2API | `providers/sub2api.js` | `SUB2API_BASE_URL` and `SUB2API_ACCESS_TOKEN` environment variables |
 | `command-code` | Command Code | `providers/command-code.js` | `command-code` OAuth/API credential in OpenCode `auth.json`, or `COMMAND_CODE_API_KEY` |
 | `cursor` | Cursor | `providers/cursor.js` | Environment/token files, OpenChamber-managed credentials, or explicit one-time Cursor import |
 | `crof` | CrofAI | `providers/crof.js` | `crof` (API key under `key` or `token`) |
@@ -78,6 +79,10 @@ Claude quota reports the subscription limits Claude Code itself is bound by, rea
 5. If needed for direct use, export a named fetcher from `packages/web/server/lib/quota/providers/index.js` and `packages/web/server/lib/quota/index.js`.
 6. Update this file with the new provider ID, module path, and alias/auth details.
 7. Validate with `bun run type-check`, `bun run lint`, and `bun run build`.
+
+## Sub2API quota semantics
+
+The server-only Sub2API provider reads `SUB2API_BASE_URL` and `SUB2API_ACCESS_TOKEN`; the token is a Sub2API panel JWT and is never returned to the UI. `GET /api/v1/user/profile` supplies the current `balance`. `GET /api/v1/payment/orders/my` is paginated to calculate net balance-recharge total: completed orders contribute `amount`, partial refunds contribute `max(amount - refund_amount, 0)`, and full refunds contribute zero. API keys for model calls cannot authenticate these requests. When non-payment sources leave a positive balance with no payment-order total, the provider reports the total as unknown rather than inventing one. VS Code does not implement the Sub2API provider yet.
 
 ## MiniMax M3 / Token Plan migration
 
