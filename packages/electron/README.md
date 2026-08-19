@@ -82,6 +82,10 @@ Build output goes to `packages/electron/dist`.
 
 macOS builds produce `dmg` and `zip` artifacts. Windows builds produce an NSIS installer. Linux builds produce an AppImage for the native x64 or arm64 host.
 
+### LingXiFox Desktop Identity
+
+Downstream builds install as `OpenChamber LingXiFox` with bundle ID `com.lingxifox.openchamber`, so the macOS bundle is `OpenChamber LingXiFox.app` and can coexist with the official app. This package identity intentionally still shares the existing OpenChamber configuration and data paths, including `~/.config/openchamber`; do not run both desktop apps concurrently while they share writable state.
+
 ## Platform Notes
 
 macOS packaging needs Xcode/build tools for notarized builds and icon asset compilation.
