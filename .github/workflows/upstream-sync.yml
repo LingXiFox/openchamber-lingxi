@@ -1,0 +1,111 @@
+name: Upstream Sync
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout downstream main
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git and fetch upstream
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git remote add upstream https://github.com/openchamber/openchamber.git
+          git fetch origin main
+          git fetch upstream main
+
+      - name: Check for upstream updates
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          count="$(git rev-list --right-only --count origin/main...upstream/main)"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+          if [ "$count" -eq 0 ]; then
+            echo "Already up to date with upstream."
+          else
+            echo "Upstream has $count new commit(s)."
+          fi
+
+      - name: Check for existing sync PR
+        if: steps.check.outputs.count != '0'
+        id: existing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          count="$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --state open \
+            --json title \
+            --jq '[.[] | select(.title == "sync: update from upstream OpenChamber")] | length')"
+
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+          if [ "$count" -ne 0 ]; then
+            echo "An upstream sync PR is already open. Skipping."
+          fi
+
+      - name: Create sync branch
+        if: steps.check.outputs.count != '0' && steps.existing.outputs.count == '0'
+        id: sync
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch="sync/upstream-$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+          git switch -c "$branch" origin/main
+
+          if ! git merge --no-ff --no-edit upstream/main; then
+            echo "::error::Upstream merge has conflicts. Manual intervention required."
+            git status --short
+            git merge --abort
+            exit 1
+          fi
+
+          git push origin "$branch"
+
+      - name: Create sync pull request
+        if: steps.check.outputs.count != '0' && steps.existing.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_BRANCH: ${{ steps.sync.outputs.branch }}
+          UPSTREAM_COUNT: ${{ steps.check.outputs.count }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$SYNC_BRANCH" \
+            --title "sync: update from upstream OpenChamber" \
+            --body "Automated downstream sync.
+
+          Upstream contains ${UPSTREAM_COUNT} new commit(s).
+
+          This PR must pass the normal Lingxi CI checks before it can be merged. Merge conflicts are never resolved automatically."
