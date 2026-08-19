@@ -2,8 +2,8 @@ import React from 'react';
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { ProviderResult, QuotaProviderId } from '@/types';
-import { QUOTA_PROVIDERS } from '@/lib/quota';
-import { isVSCodeRuntime } from '@/lib/desktop';
+import { getVisibleQuotaProviders } from '@/lib/quota';
+import { canUseElectronDesktopIPC, invokeDesktop, isVSCodeRuntime } from '@/lib/desktop';
 import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { getDefaultModels } from '@/lib/quota/model-families';
 import { updateDesktopSettings } from '@/lib/persistence';
@@ -12,6 +12,34 @@ import { runtimeFetch } from '@/lib/runtime-fetch';
 const QUOTA_REFRESH_INTERVAL_MS = 3 * 60 * 1000;
 let quotaAutoRefreshConsumers = 0;
 let quotaAutoRefreshInterval: number | null = null;
+
+type QuotaFetchDependencies = {
+  runtimeFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+  canUseElectronDesktopIPC: () => boolean;
+  invokeDesktop: (command: string) => Promise<ProviderResult | null>;
+};
+
+const quotaFetchDependencies: QuotaFetchDependencies = {
+  runtimeFetch,
+  canUseElectronDesktopIPC,
+  invokeDesktop: (command) => invokeDesktop<ProviderResult>(command),
+};
+
+export const fetchProviderQuotaResult = async (
+  providerId: QuotaProviderId,
+  dependencies = quotaFetchDependencies,
+): Promise<ProviderResult> => {
+  if (providerId === 'sub2api' && dependencies.canUseElectronDesktopIPC()) {
+    const payload = await dependencies.invokeDesktop('desktop_fetch_sub2api_quota');
+    if (!payload) throw new Error('Desktop IPC unavailable');
+    return payload;
+  }
+
+  const response = await dependencies.runtimeFetch(`/api/quota/${encodeURIComponent(providerId)}`);
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(payload?.error || 'Failed to fetch quota');
+  return payload;
+};
 
 interface QuotaSettingsState {
   displayMode: 'usage' | 'remaining';
@@ -43,7 +71,7 @@ interface QuotaStore extends QuotaSettingsState {
 }
 
 const parseSettings = (data: Record<string, unknown> | null): QuotaSettingsState => {
-  const allProviderIds = QUOTA_PROVIDERS.map((provider) => provider.id);
+  const allProviderIds = getVisibleQuotaProviders().map((provider) => provider.id);
   const displayMode = data?.usageDisplayMode === 'remaining' ? 'remaining' : 'usage';
   const rawDropdownProviders = Array.isArray(data?.usageDropdownProviders)
     ? data?.usageDropdownProviders
@@ -109,7 +137,7 @@ const loadSettingsFromRuntime = async (): Promise<QuotaSettingsState> => {
 
   return {
     displayMode: 'usage',
-    dropdownProviderIds: QUOTA_PROVIDERS.map((provider) => provider.id),
+    dropdownProviderIds: getVisibleQuotaProviders().map((provider) => provider.id),
     selectedModels: {},
     expandedFamilies: {},
   };
@@ -125,7 +153,7 @@ export const useQuotaStore = create<QuotaStore>()(
       lastUpdated: null,
       error: null,
       displayMode: 'usage',
-      dropdownProviderIds: QUOTA_PROVIDERS.map((provider) => provider.id),
+      dropdownProviderIds: getVisibleQuotaProviders().map((provider) => provider.id),
       selectedModels: {},
       expandedFamilies: {},
 
@@ -155,7 +183,7 @@ export const useQuotaStore = create<QuotaStore>()(
       },
 
       fetchAllQuotas: async () => {
-        await get().fetchQuotas(QUOTA_PROVIDERS.map((provider) => provider.id));
+        await get().fetchQuotas(getVisibleQuotaProviders().map((provider) => provider.id));
       },
 
       fetchProviderQuota: async (providerId) => {
@@ -163,13 +191,8 @@ export const useQuotaStore = create<QuotaStore>()(
           isFetchingProvider: { ...state.isFetchingProvider, [providerId]: true }
         }));
         try {
-          const response = await runtimeFetch(`/api/quota/${encodeURIComponent(providerId)}`);
-          const payload = await response.json().catch(() => null);
-          if (!response.ok) {
-            throw new Error(payload?.error || 'Failed to fetch quota');
-          }
+          const result = await fetchProviderQuotaResult(providerId);
 
-          const result = payload as ProviderResult;
           set((state) => {
             const next = state.results.filter((entry) => entry.providerId !== providerId);
             next.push(result);

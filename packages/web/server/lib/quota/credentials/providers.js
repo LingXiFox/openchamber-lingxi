@@ -2,6 +2,20 @@ import { deleteQuotaCredential, readQuotaCredential, writeQuotaCredential } from
 
 const clean = (value) => typeof value === 'string' && !/[\r\n]/.test(value) ? value.trim() : '';
 
+const normalizeSub2ApiBaseUrl = (value) => {
+  const baseUrl = clean(value);
+  if (!baseUrl) return null;
+  try {
+    const url = new URL(baseUrl);
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.username || url.password || url.search || url.hash) {
+      return null;
+    }
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
+};
+
 export const normalizers = {
   'ollama-cloud': (value) => {
     const cookie = clean(value?.cookie);
@@ -11,6 +25,11 @@ export const normalizers = {
     const accessToken = clean(value?.accessToken);
     const refreshToken = clean(value?.refreshToken);
     return accessToken || refreshToken ? { accessToken, refreshToken } : null;
+  },
+  sub2api: (value) => {
+    const baseUrl = normalizeSub2ApiBaseUrl(value?.baseUrl);
+    const accessToken = clean(value?.accessToken);
+    return baseUrl && accessToken ? { baseUrl, accessToken } : null;
   },
 };
 

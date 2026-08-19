@@ -42,6 +42,7 @@ import {
   writeBackgroundAppearance,
 } from './background-appearance.mjs';
 import { mintOutsideFileGrant } from '@openchamber/web/server/lib/fs/routes.js';
+import { fetchQuota as fetchSub2ApiQuota } from '@openchamber/web/server/lib/quota/providers/sub2api.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -3962,6 +3963,9 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
 
     case 'desktop_background_clear':
       return clearDesktopBackground(args);
+
+    case 'desktop_fetch_sub2api_quota':
+      return fetchSub2ApiQuota();
 
     case 'desktop_start_window_drag':
       return null;
