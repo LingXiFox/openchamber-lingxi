@@ -52,8 +52,8 @@
     "lint": "node -e \"process.exit(0)\""
   },
   "build": {
-    "appId": "dev.openchamber.desktop",
-    "productName": "OpenChamber",
+    "appId": "com.lingxifox.openchamber",
+    "productName": "OpenChamber LingXiFox",
     "files": [
       "dist-bundle/main.mjs",
       "preload.mjs"
@@ -162,8 +162,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "openchamber",
-      "repo": "openchamber"
+      "owner": "LingXiFox",
+      "repo": "openchamber-lingxi"
     }
   }
 }
