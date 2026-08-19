@@ -6,7 +6,6 @@
 > **OpenChamber 泠溪小狐狸版** 是 [OpenChamber](https://github.com/openchamber/openchamber) 的独立下游发行版。
 > 本项目持续跟踪上游，同时加入泠溪小狐狸专属的集成、工作流与产品改动。本项目并非 OpenChamber 官方发行版。
 
-
 [![GitHub stars](https://img.shields.io/github/stars/LingXiFox/openchamber-lingxi?style=flat&labelColor=100F0F&color=66800B)](https://github.com/LingXiFox/openchamber-lingxi/stargazers)
 [![GitHub release](https://img.shields.io/github/v/release/LingXiFox/openchamber-lingxi?style=flat&labelColor=100F0F&color=205EA6)](https://github.com/LingXiFox/openchamber-lingxi/releases/latest)
 [![Discord](https://img.shields.io/badge/Discord-join.svg?style=flat&labelColor=100F0F&color=8B7EC8&logo=discord&logoColor=FFFCF0)](https://discord.gg/ZYRSdnwwKA)
