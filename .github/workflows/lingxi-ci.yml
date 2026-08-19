@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   verify:
+    name: Lingxi Verify
     runs-on: ubuntu-latest
 
     steps:
