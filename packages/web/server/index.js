@@ -279,6 +279,7 @@ const themeRuntime = createThemeRuntime({
 });
 
 const readCustomThemesFromDisk = (...args) => themeRuntime.readCustomThemesFromDisk(...args);
+const resolveThemeAsset = (...args) => themeRuntime.resolveThemeAsset(...args);
 
 let notificationTemplateRuntime = null;
 let agentToolRuntime = null;
@@ -1869,6 +1870,7 @@ async function main(options = {}) {
     resolveOptionalProjectDirectory,
     validateDirectoryPath,
     readCustomThemesFromDisk,
+    resolveThemeAsset,
     refreshOpenCodeAfterConfigChange,
     getOpenCodeResolutionSnapshot,
     getOpenCodeUpgradeCapability,

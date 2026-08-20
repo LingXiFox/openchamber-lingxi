@@ -104,6 +104,27 @@ interface ButtonVariant {
   disabled?: string;
 }
 
+export interface ThemeWallpaper {
+  asset?: string;
+  fit?: 'cover' | 'contain';
+  position?: 'center' | 'top' | 'bottom' | 'left' | 'right';
+  opacity?: number;
+}
+
+export interface ThemeSurfaceAppearance {
+  main?: number;
+  header?: number;
+  sidebar?: number;
+  chat?: number;
+  composer?: number;
+  contextPanel?: number;
+}
+
+export interface ThemeAppearance {
+  wallpaper?: ThemeWallpaper;
+  surfaces?: ThemeSurfaceAppearance;
+}
+
 export interface Theme {
   metadata: ThemeMetadata;
 
@@ -177,4 +198,6 @@ export interface Theme {
       slow?: string;
     };
   };
+
+  appearance?: ThemeAppearance;
 }

@@ -42,7 +42,7 @@ This module provides OpenCode server integration utilities for the web server ru
 - `packages/web/server/lib/opencode/settings-runtime.js`: Settings persistence runtime (disk IO, migrations, normalization, project validation, and persisted update serialization).
 - `packages/web/server/lib/opencode/settings-helpers.js`: Settings payload sanitization/format helpers runtime for response shaping and persisted merge prep.
 - `packages/web/server/lib/opencode/settings-normalization-runtime.js`: path/settings/tunnel normalization and sanitization helpers runtime used by settings/routes/config wiring.
-- `packages/web/server/lib/opencode/theme-runtime.js`: custom theme JSON validation and theme directory loading runtime for settings utility routes.
+- `packages/web/server/lib/opencode/theme-runtime.js`: custom theme validation, directory-theme discovery, safe wallpaper asset registry, and asset resolution runtime for settings utility routes.
 - `packages/web/server/lib/opencode/proxy.js`: OpenCode API/SSE forwarding and readiness-gate route registration.
 - `packages/web/server/lib/opencode/session-runtime.js`: session status/attention/activity runtime for OpenCode SSE events.
 - `packages/web/server/lib/opencode/watcher.js`: global SSE watcher runtime for push/session event fanout.
@@ -236,10 +236,13 @@ Managed health failures are classified as `timeout`, `connection_refused`, `conn
   - `sanitizeProjects(input)`
 
 ## Public exports (theme-runtime.js)
-- `createThemeRuntime(dependencies)`: creates custom theme runtime for on-disk theme discovery and JSON normalization/validation.
+- `createThemeRuntime(dependencies)`: creates the custom theme runtime for on-disk discovery, fail-soft normalization, and safe asset resolution.
 - Returned API:
   - `normalizeThemeJson(raw)`
   - `readCustomThemesFromDisk()`
+  - `resolveThemeAsset(themeId, assetPath)`
+
+Custom themes support both legacy `~/.config/openchamber/themes/<name>.json` files and directory themes at `~/.config/openchamber/themes/<directory>/theme.json`. Directory themes may reference `assets/<path>` through `appearance.wallpaper.asset`; the theme ID remains `metadata.id`, not the directory name. Wallpaper assets must be safe relative paths and are limited to PNG/JPEG files up to 12 MiB. The server rejects traversal, encoded paths, URLs, unsupported formats, content/type mismatches, and symlinks that escape the theme's `assets/` directory. An invalid appearance field or asset is removed while valid colors and other appearance fields continue loading. An invalid required theme field excludes only that custom theme for the scan.
 
 ## Public exports (project-directory-runtime.js)
 - `createProjectDirectoryRuntime(dependencies)`: creates runtime for request/project directory candidate normalization and validation.
@@ -289,6 +292,7 @@ Managed health failures are classified as `timeout`, `connection_refused`, `conn
    - `app.use('/api', ...)` auth/tunnel guard
 - `registerSettingsUtilityRoutes(app, dependencies)`: registers small settings utility endpoints:
   - `GET /api/config/themes`
+  - `GET /api/config/themes/:themeId/assets/*assetPath` — serves only the validated wallpaper asset registered for a directory theme, with explicit image MIME and `nosniff`; it never exposes filesystem paths or acts as a generic file server.
   - `POST /api/config/reload` — applies accumulated deferred OpenCode config changes. Managed OpenCode restarts and returns `requiresReload: true`. External OpenCode returns `requiresManualRestart: true` (changes are already on disk; the connected server must be restarted outside OpenChamber).
 - `registerCommonRequestMiddleware(app, dependencies)`: registers shared request middleware stack:
   - conditional JSON body parser behavior for `/api/*` vs non-API requests
