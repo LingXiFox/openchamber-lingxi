@@ -245,10 +245,9 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
         return theme;
       }
 
-      const fallback = availableThemes.find((candidate) => candidate.metadata.variant === variant);
-      return fallback ?? fallbackThemeForVariant(variant);
+      return fallbackThemeForVariant(variant);
     },
-    [availableThemes, getThemeByIdFromAvailable],
+    [getThemeByIdFromAvailable],
   );
 
   const currentTheme = useMemo(() => {
@@ -295,8 +294,7 @@ export function ThemeSystemProvider({ children, defaultThemeId }: ThemeSystemPro
       const payload = await res.json();
       if (request !== customThemesRequestRef.current || runtimeKey !== getRuntimeKey()) return;
       const incoming = Array.isArray(payload?.themes) ? payload.themes : [];
-      const normalized = incoming.filter(isValidTheme);
-      setCustomThemes(normalized);
+      setCustomThemes(incoming.filter(isValidTheme));
     } catch {
       // ignore
     } finally {

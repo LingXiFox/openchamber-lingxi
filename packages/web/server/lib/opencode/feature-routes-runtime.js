@@ -102,6 +102,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
       resolveOptionalProjectDirectory,
       validateDirectoryPath,
       readCustomThemesFromDisk,
+      resolveThemeAsset,
       refreshOpenCodeAfterConfigChange,
       getOpenCodeResolutionSnapshot,
       getOpenCodeUpgradeCapability,
@@ -136,6 +137,7 @@ export const createFeatureRoutesRuntime = (dependencies) => {
 
     registerSettingsUtilityRoutes(app, {
       readCustomThemesFromDisk,
+      resolveThemeAsset,
       refreshOpenCodeAfterConfigChange,
       clientReloadDelayMs,
     });
