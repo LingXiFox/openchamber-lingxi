@@ -137,7 +137,7 @@ export const createThemeRuntime = ({ fsPromises, path, themesDir, maxThemeJsonBy
   const normalizeThemeJson = (raw) => {
     if (!isObject(raw)) return null;
 
-    const { metadata, colors } = raw;
+    const { metadata, colors, appearance: rawAppearance, ...themeWithoutAppearance } = raw;
     if (!isObject(metadata) || !isObject(colors)) return null;
 
     const { id, name, variant } = metadata;
@@ -165,7 +165,7 @@ export const createThemeRuntime = ({ fsPromises, path, themesDir, maxThemeJsonBy
     if (!required.every(isNonEmptyString)) return null;
 
     const theme = {
-      ...raw,
+      ...themeWithoutAppearance,
       metadata: {
         ...metadata,
         id: id.trim(),
@@ -179,15 +179,15 @@ export const createThemeRuntime = ({ fsPromises, path, themesDir, maxThemeJsonBy
       },
     };
 
-    if (raw.appearance === undefined) return { theme, diagnostics: [] };
-    const { appearance, diagnostics } = sanitizeAppearance(raw.appearance, theme.metadata.id);
+    if (rawAppearance === undefined) return { theme, diagnostics: [] };
+    const { appearance, diagnostics } = sanitizeAppearance(rawAppearance, theme.metadata.id);
     return {
       theme: appearance ? { ...theme, appearance } : theme,
       diagnostics,
     };
   };
 
-  const validateAsset = async (assetsRoot, assetPath) => {
+  const validateAsset = async (themeRoot, assetsRoot, assetPath) => {
     if (!isValidThemeAssetPath(assetPath)) {
       return { ok: false, code: 'asset-rejected', message: 'asset path rejected' };
     }
@@ -195,11 +195,18 @@ export const createThemeRuntime = ({ fsPromises, path, themesDir, maxThemeJsonBy
     const mime = ASSET_MIME_TYPES.get(path.extname(assetPath).toLowerCase());
     if (!mime) return { ok: false, code: 'asset-unsupported', message: 'only PNG and JPEG assets are supported' };
 
+    let realThemeRoot;
     let realAssetsRoot;
     try {
-      realAssetsRoot = await fsPromises.realpath(assetsRoot);
+      [realThemeRoot, realAssetsRoot] = await Promise.all([
+        fsPromises.realpath(themeRoot),
+        fsPromises.realpath(assetsRoot),
+      ]);
     } catch {
       return { ok: false, code: 'asset-missing', message: 'assets directory unavailable' };
+    }
+    if (!realAssetsRoot.startsWith(`${realThemeRoot}${path.sep}`)) {
+      return { ok: false, code: 'asset-rejected', message: 'assets directory escapes theme directory' };
     }
 
     const candidate = path.resolve(realAssetsRoot, assetPath);
@@ -262,7 +269,7 @@ export const createThemeRuntime = ({ fsPromises, path, themesDir, maxThemeJsonBy
           diagnostics.push(diagnostic('warning', 'asset-rejected', 'legacy themes cannot contain wallpaper assets', theme.metadata.id));
           theme = withoutWallpaper(theme);
         } else {
-          const asset = await validateAsset(assetsRoot, theme.appearance.wallpaper.asset);
+          const asset = await validateAsset(path.dirname(filePath), assetsRoot, theme.appearance.wallpaper.asset);
           if (!asset.ok) {
             diagnostics.push(diagnostic('warning', asset.code, asset.message, theme.metadata.id));
             theme = withoutWallpaper(theme);
@@ -348,7 +355,7 @@ export const createThemeRuntime = ({ fsPromises, path, themesDir, maxThemeJsonBy
       return { ok: false, status: 404, code: 'asset-missing', message: 'theme asset not found' };
     }
 
-    const asset = await validateAsset(entry.assetsRoot, assetPath);
+    const asset = await validateAsset(path.dirname(entry.assetsRoot), entry.assetsRoot, assetPath);
     if (asset.ok) return asset;
 
     const statuses = {

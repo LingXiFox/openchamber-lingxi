@@ -7,33 +7,36 @@ import { createThemeRuntime } from './theme-runtime.js';
 const PNG_HEADER = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const roots = [];
 
-const createTheme = (id, appearance) => ({
-  metadata: { id, name: id, variant: 'dark', tags: [] },
-  colors: {
-    primary: { base: '#111111', foreground: '#ffffff' },
-    surface: {
-      background: '#111111', foreground: '#ffffff', muted: '#222222', mutedForeground: '#dddddd',
-      elevated: '#333333', elevatedForeground: '#ffffff', subtle: '#444444',
-    },
-    interactive: {
-      border: '#111111', selection: '#111111', selectionForeground: '#ffffff', focusRing: '#111111', hover: '#111111',
-    },
-    status: {
-      error: '#111111', errorForeground: '#ffffff', errorBackground: '#111111', errorBorder: '#111111',
-      warning: '#111111', warningForeground: '#ffffff', warningBackground: '#111111', warningBorder: '#111111',
-      success: '#111111', successForeground: '#ffffff', successBackground: '#111111', successBorder: '#111111',
-      info: '#111111', infoForeground: '#ffffff', infoBackground: '#111111', infoBorder: '#111111',
-    },
-    syntax: {
-      base: {
-        background: '#111111', foreground: '#ffffff', keyword: '#111111', string: '#111111', number: '#111111',
-        function: '#111111', variable: '#111111', type: '#111111', comment: '#111111', operator: '#111111',
+const createTheme = (id, appearance) => {
+  const theme = {
+    metadata: { id, name: id, variant: 'dark', tags: [] },
+    colors: {
+      primary: { base: '#111111', foreground: '#ffffff' },
+      surface: {
+        background: '#111111', foreground: '#ffffff', muted: '#222222', mutedForeground: '#dddddd',
+        elevated: '#333333', elevatedForeground: '#ffffff', subtle: '#444444',
       },
-      highlights: { diffAdded: '#111111', diffRemoved: '#111111', lineNumber: '#111111' },
+      interactive: {
+        border: '#111111', selection: '#111111', selectionForeground: '#ffffff', focusRing: '#111111', hover: '#111111',
+      },
+      status: {
+        error: '#111111', errorForeground: '#ffffff', errorBackground: '#111111', errorBorder: '#111111',
+        warning: '#111111', warningForeground: '#ffffff', warningBackground: '#111111', warningBorder: '#111111',
+        success: '#111111', successForeground: '#ffffff', successBackground: '#111111', successBorder: '#111111',
+        info: '#111111', infoForeground: '#ffffff', infoBackground: '#111111', infoBorder: '#111111',
+      },
+      syntax: {
+        base: {
+          background: '#111111', foreground: '#ffffff', keyword: '#111111', string: '#111111', number: '#111111',
+          function: '#111111', variable: '#111111', type: '#111111', comment: '#111111', operator: '#111111',
+        },
+        highlights: { diffAdded: '#111111', diffRemoved: '#111111', lineNumber: '#111111' },
+      },
     },
-  },
-  ...(appearance ? { appearance } : {}),
-});
+  };
+  if (appearance) theme.appearance = appearance;
+  return theme;
+};
 
 const createFixture = async () => {
   const themesDir = await mkdtemp(path.join(os.tmpdir(), 'openchamber-themes-'));
@@ -80,6 +83,16 @@ describe('theme runtime', () => {
     expect(result.themes).toHaveLength(1);
     expect(result.themes[0].appearance).toEqual({ surfaces: { chat: 0.85 } });
     expect(result.diagnostics.some((item) => item.code === 'asset-rejected')).toBe(true);
+  });
+
+  it('drops an entirely invalid appearance from the normalized theme', async () => {
+    const { themesDir, runtime } = await createFixture();
+    await writeFile(path.join(themesDir, 'invalid.json'), JSON.stringify(createTheme('invalid', 'invalid')));
+
+    const result = await runtime.readCustomThemesFromDisk();
+
+    expect(result.themes[0].appearance).toBeUndefined();
+    expect(result.diagnostics.some((item) => item.code === 'appearance-invalid')).toBe(true);
   });
 
   it('rejects unsafe asset paths and unsupported asset formats', async () => {
@@ -162,6 +175,23 @@ describe('theme runtime', () => {
     await mkdir(path.join(themesDir, 'symlink', 'assets'), { recursive: true });
     await symlink(outside, path.join(themesDir, 'symlink', 'assets', 'wallpaper.png'));
     await writeFile(path.join(themesDir, 'symlink', 'theme.json'), JSON.stringify(createTheme('symlink', {
+      wallpaper: { asset: 'wallpaper.png' },
+    })));
+
+    const result = await runtime.readCustomThemesFromDisk();
+
+    expect(result.themes[0].appearance).toBeUndefined();
+    expect(result.diagnostics.some((item) => item.code === 'asset-rejected')).toBe(true);
+  });
+
+  it('rejects an assets directory symlink that escapes its theme directory', async () => {
+    const { themesDir, runtime } = await createFixture();
+    const outsideAssets = path.join(themesDir, 'outside-assets');
+    await mkdir(outsideAssets, { recursive: true });
+    await writeFile(path.join(outsideAssets, 'wallpaper.png'), PNG_HEADER);
+    await mkdir(path.join(themesDir, 'directory-symlink'), { recursive: true });
+    await symlink(outsideAssets, path.join(themesDir, 'directory-symlink', 'assets'));
+    await writeFile(path.join(themesDir, 'directory-symlink', 'theme.json'), JSON.stringify(createTheme('directory-symlink', {
       wallpaper: { asset: 'wallpaper.png' },
     })));
 
