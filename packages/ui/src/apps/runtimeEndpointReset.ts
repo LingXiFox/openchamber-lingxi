@@ -11,6 +11,7 @@ import { usePermissionStore } from '@/stores/permissionStore';
 import { useFileSearchStore } from '@/stores/useFileSearchStore';
 import { useGitStore } from '@/stores/useGitStore';
 import { useGitHubPrStatusStore } from '@/stores/useGitHubPrStatusStore';
+import { useSkillsCatalogStore } from '@/stores/useSkillsCatalogStore';
 import { useSessionFoldersStore } from '@/stores/useSessionFoldersStore';
 import { useFilesViewTabsStore } from '@/stores/useFilesViewTabsStore';
 import { useTerminalStore } from '@/stores/useTerminalStore';
@@ -68,6 +69,7 @@ export const resetAppForRuntimeEndpointChange = (detail: RuntimeEndpointChangedD
   useFileSearchStore.getState().resetForRuntimeSwitch();
   useGitStore.getState().resetForRuntimeSwitch(detail.runtimeKey);
   useGitHubPrStatusStore.getState().resetForRuntimeSwitch();
+  useSkillsCatalogStore.getState().resetForRuntimeSwitch();
   useSessionFoldersStore.getState().resetForRuntimeSwitch(detail.runtimeKey);
   useFilesViewTabsStore.getState().resetForRuntimeSwitch(detail.runtimeKey);
   useSessionUIStore.getState().restoreForRuntimeSwitch(detail.runtimeKey);
