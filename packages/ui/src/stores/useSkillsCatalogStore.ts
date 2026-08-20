@@ -18,6 +18,7 @@ import { opencodeClient } from '@/lib/opencode/client';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { startConfigUpdate } from '@/lib/configUpdate';
 import { runtimeFetch } from '@/lib/runtime-fetch';
+import { getRuntimeKey } from '@/lib/runtime-switch';
 import { noteDeferredRestartFromPayload } from '@/lib/opencode/deferredRestart';
 
 const FALLBACK_SOURCES: SkillsCatalogSource[] = [
@@ -30,11 +31,27 @@ const FALLBACK_SOURCES: SkillsCatalogSource[] = [
     sourceType: 'github',
   },
   {
-    id: 'clawdhub',
-    label: 'ClawHub',
-    description: 'Community skill registry with vector search',
-    source: 'clawdhub:registry',
-    sourceType: 'clawdhub',
+    id: 'openai',
+    label: 'OpenAI',
+    description: "OpenAI's curated skills",
+    source: 'openai/skills',
+    defaultSubpath: 'skills/.curated',
+    sourceType: 'github',
+  },
+  {
+    id: 'cursor',
+    label: 'Cursor',
+    description: "Cursor's plugin skills",
+    source: 'cursor/plugins',
+    defaultSubpath: 'pstack/skills',
+    sourceType: 'github',
+  },
+  {
+    id: 'mattpocock',
+    label: 'Matt Pocock',
+    description: 'Matt Pocock skills collection',
+    source: 'mattpocock/skills',
+    sourceType: 'github',
   },
 ];
 
@@ -42,10 +59,15 @@ const SKILLS_CATALOG_LOAD_CACHE_TTL_MS = 5000;
 const DEFAULT_SKILLS_CATALOG_CACHE_KEY = '__default__';
 const skillsCatalogLastLoadedAt = new Map<string, number>();
 const skillsCatalogLoadInFlight = new Map<string, Promise<boolean>>();
+const sourceLoadInFlight = new Map<string, Promise<boolean>>();
+let activeSourceLoads = 0;
+let skillsCatalogGeneration = 0;
 
-const getSkillsCatalogCacheKey = (directory: string | null): string => {
-  return directory?.trim() || DEFAULT_SKILLS_CATALOG_CACHE_KEY;
-};
+const getSkillsCatalogCacheKey = (runtimeKey: string, directory: string | null): string =>
+  JSON.stringify([runtimeKey, directory?.trim() || DEFAULT_SKILLS_CATALOG_CACHE_KEY]);
+
+const getSourceLoadKey = (runtimeKey: string, directory: string | null, sourceId: string): string =>
+  JSON.stringify([runtimeKey, directory?.trim() || DEFAULT_SKILLS_CATALOG_CACHE_KEY, sourceId]);
 
 const getRequestDirectory = (): string | null => {
   try {
@@ -71,13 +93,10 @@ export interface SkillsCatalogState {
   sources: SkillsCatalogSource[];
   itemsBySource: Record<string, SkillsCatalogItem[]>;
   selectedSourceId: string | null;
-  pageInfoBySource: Record<string, { nextCursor?: string | null }>;
   loadedSourceIds: Record<string, boolean>;
-  clawdhubHasMoreBySource: Record<string, boolean>;
 
   isLoadingCatalog: boolean;
   isLoadingSource: boolean;
-  isLoadingMore: boolean;
   isScanning: boolean;
   isInstalling: boolean;
 
@@ -88,10 +107,10 @@ export interface SkillsCatalogState {
   scanResults: SkillsCatalogItem[] | null;
 
   setSelectedSource: (id: string | null) => void;
+  resetForRuntimeSwitch: () => void;
 
   loadCatalog: (options?: { refresh?: boolean }) => Promise<boolean>;
   loadSource: (sourceId: string, options?: { refresh?: boolean }) => Promise<boolean>;
-  loadMoreClawdHub: () => Promise<boolean>;
   scanRepo: (request: SkillsRepoScanRequest) => Promise<SkillsRepoScanResponse>;
   installSkills: (request: SkillsInstallRequest, options?: { directory?: string | null }) => Promise<SkillsInstallResponse>;
 }
@@ -102,13 +121,10 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
       sources: FALLBACK_SOURCES,
       itemsBySource: {},
       selectedSourceId: FALLBACK_SOURCES[0]?.id ?? null,
-      pageInfoBySource: {},
       loadedSourceIds: {},
-      clawdhubHasMoreBySource: {},
 
       isLoadingCatalog: false,
       isLoadingSource: false,
-      isLoadingMore: false,
       isScanning: false,
       isInstalling: false,
 
@@ -120,9 +136,35 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
 
       setSelectedSource: (id) => set({ selectedSourceId: id }),
 
+      resetForRuntimeSwitch: () => {
+        skillsCatalogGeneration += 1;
+        activeSourceLoads = 0;
+        skillsCatalogLastLoadedAt.clear();
+        skillsCatalogLoadInFlight.clear();
+        sourceLoadInFlight.clear();
+        set({
+          sources: FALLBACK_SOURCES,
+          itemsBySource: {},
+          selectedSourceId: FALLBACK_SOURCES[0]?.id ?? null,
+          loadedSourceIds: {},
+          isLoadingCatalog: false,
+          isLoadingSource: false,
+          lastCatalogError: null,
+          lastScanError: null,
+          scanResults: null,
+        });
+      },
+
       loadCatalog: async (options) => {
+        const runtimeKey = getRuntimeKey();
+        const generation = skillsCatalogGeneration;
         const currentDirectory = getRequestDirectory();
-        const cacheKey = getSkillsCatalogCacheKey(currentDirectory);
+        const isCurrentScope = () => (
+          generation === skillsCatalogGeneration
+          && runtimeKey === getRuntimeKey()
+          && currentDirectory === getRequestDirectory()
+        );
+        const cacheKey = getSkillsCatalogCacheKey(runtimeKey, currentDirectory);
         const now = Date.now();
         const loadedAt = skillsCatalogLastLoadedAt.get(cacheKey) ?? 0;
         const hasCachedCatalog = get().sources.length > 0;
@@ -141,9 +183,7 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
           const previous = {
             sources: get().sources,
             itemsBySource: get().itemsBySource,
-            pageInfoBySource: get().pageInfoBySource,
             loadedSourceIds: get().loadedSourceIds,
-            clawdhubHasMoreBySource: get().clawdhubHasMoreBySource,
           };
 
           let lastError: SkillsCatalogResponse['error'] | null = null;
@@ -161,6 +201,9 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
               });
 
               const payload = (await response.json().catch(() => null)) as SkillsCatalogResponse | null;
+              if (!isCurrentScope()) {
+                return false;
+              }
               if (!response.ok || !payload?.ok) {
                 lastError = payload?.error || { kind: 'unknown', message: `Failed to load catalog (${response.status})` };
                 throw new Error(lastError.message);
@@ -168,9 +211,7 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
 
               const sources = (payload.sources && payload.sources.length > 0) ? payload.sources : previous.sources;
               const itemsBySource = options?.refresh ? {} : (get().itemsBySource || {});
-              const pageInfoBySource = options?.refresh ? {} : (get().pageInfoBySource || {});
               const loadedSourceIds = options?.refresh ? {} : (get().loadedSourceIds || {});
-              const clawdhubHasMoreBySource = options?.refresh ? {} : (get().clawdhubHasMoreBySource || {});
               const currentSelected = get().selectedSourceId;
               const selectedSourceId =
                 (currentSelected && sources.some((s) => s.id === currentSelected))
@@ -180,9 +221,7 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
               set({
                 sources,
                 itemsBySource,
-                pageInfoBySource,
                 loadedSourceIds,
-                clawdhubHasMoreBySource,
                 selectedSourceId,
               });
 
@@ -194,18 +233,20 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
           } catch (error) {
             lastError = lastError || { kind: 'unknown', message: error instanceof Error ? error.message : String(error) };
 
-            set({
-              sources: previous.sources,
-              itemsBySource: previous.itemsBySource,
-              pageInfoBySource: previous.pageInfoBySource,
-              loadedSourceIds: previous.loadedSourceIds,
-              clawdhubHasMoreBySource: previous.clawdhubHasMoreBySource,
-              lastCatalogError: lastError || { kind: 'unknown', message: 'Failed to load catalog' },
-            });
+            if (isCurrentScope()) {
+              set({
+                sources: previous.sources,
+                itemsBySource: previous.itemsBySource,
+                loadedSourceIds: previous.loadedSourceIds,
+                lastCatalogError: lastError || { kind: 'unknown', message: 'Failed to load catalog' },
+              });
+            }
 
             return false;
           } finally {
-            set({ isLoadingCatalog: false });
+            if (isCurrentScope()) {
+              set({ isLoadingCatalog: false });
+            }
           }
         })();
 
@@ -213,7 +254,9 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
         try {
           return await request;
         } finally {
-          skillsCatalogLoadInFlight.delete(cacheKey);
+          if (skillsCatalogLoadInFlight.get(cacheKey) === request) {
+            skillsCatalogLoadInFlight.delete(cacheKey);
+          }
         }
       },
 
@@ -222,136 +265,99 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
           return false;
         }
 
+        const runtimeKey = getRuntimeKey();
+        const generation = skillsCatalogGeneration;
+        const currentDirectory = getRequestDirectory();
+        const sourceKey = getSourceLoadKey(runtimeKey, currentDirectory, sourceId);
+        const isCurrentRuntime = () => generation === skillsCatalogGeneration && runtimeKey === getRuntimeKey();
+        const isCurrentScope = () => isCurrentRuntime() && currentDirectory === getRequestDirectory();
+
+        // Deduplicate concurrent loads of the same source: the background
+        // loader effect can restart while a request for this source is
+        // already in flight.
+        if (!options?.refresh) {
+          const inFlight = sourceLoadInFlight.get(sourceKey);
+          if (inFlight) {
+            return inFlight;
+          }
+        }
+
+        activeSourceLoads += 1;
         set({ isLoadingSource: true, lastCatalogError: null });
 
-        try {
-          const currentDirectory = getRequestDirectory();
-          const refresh = options?.refresh ? '&refresh=true' : '';
-          const queryParams = currentDirectory
-            ? `?directory=${encodeURIComponent(currentDirectory)}&sourceId=${encodeURIComponent(sourceId)}${refresh}`
-            : `?sourceId=${encodeURIComponent(sourceId)}${refresh}`;
+        const request = (async () => {
+          try {
+            const refresh = options?.refresh ? '&refresh=true' : '';
+            const queryParams = currentDirectory
+              ? `?directory=${encodeURIComponent(currentDirectory)}&sourceId=${encodeURIComponent(sourceId)}${refresh}`
+              : `?sourceId=${encodeURIComponent(sourceId)}${refresh}`;
 
-          const response = await runtimeFetch(`/api/config/skills/catalog/source${queryParams}`, {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-          });
-
-          const payload = (await response.json().catch(() => null)) as SkillsCatalogSourceResponse | null;
-          const hasItems = Array.isArray((payload as SkillsCatalogSourceResponse | null)?.items);
-          if (!response.ok || (!payload?.ok && !hasItems)) {
-            const fallback = await runtimeFetch(`/api/config/skills/catalog${queryParams}`, {
+            const response = await runtimeFetch(`/api/config/skills/catalog/source${queryParams}`, {
               method: 'GET',
               headers: { Accept: 'application/json' },
             });
-            const fallbackPayload = (await fallback.json().catch(() => null)) as SkillsCatalogResponse | null;
-            const fallbackItems = fallbackPayload?.itemsBySource?.[sourceId];
-            if (fallback.ok && fallbackPayload?.ok && Array.isArray(fallbackItems)) {
-              set((state) => ({
-                itemsBySource: { ...state.itemsBySource, [sourceId]: fallbackItems },
-                pageInfoBySource: { ...state.pageInfoBySource, [sourceId]: { nextCursor: null } },
-                loadedSourceIds: { ...state.loadedSourceIds, [sourceId]: true },
-                clawdhubHasMoreBySource: { ...state.clawdhubHasMoreBySource, [sourceId]: false },
-              }));
-              return true;
+
+            const payload = (await response.json().catch(() => null)) as SkillsCatalogSourceResponse | null;
+            if (!isCurrentScope()) {
+              return false;
+            }
+            const hasItems = Array.isArray((payload as SkillsCatalogSourceResponse | null)?.items);
+            if (!response.ok || (!payload?.ok && !hasItems)) {
+              const fallback = await runtimeFetch(`/api/config/skills/catalog${queryParams}`, {
+                method: 'GET',
+                headers: { Accept: 'application/json' },
+              });
+              const fallbackPayload = (await fallback.json().catch(() => null)) as SkillsCatalogResponse | null;
+              if (!isCurrentScope()) {
+                return false;
+              }
+              const fallbackItems = fallbackPayload?.itemsBySource?.[sourceId];
+              if (fallback.ok && fallbackPayload?.ok && Array.isArray(fallbackItems)) {
+                set((state) => ({
+                  itemsBySource: { ...state.itemsBySource, [sourceId]: fallbackItems },
+                  loadedSourceIds: { ...state.loadedSourceIds, [sourceId]: true },
+                }));
+                return true;
+              }
+
+              set({
+                lastCatalogError: payload?.error || { kind: 'unknown', message: `Failed to load source (${response.status})` },
+              });
+              return false;
             }
 
-            set({
-              lastCatalogError: payload?.error || { kind: 'unknown', message: `Failed to load source (${response.status})` },
-            });
+            const items = payload?.items || [];
+
+            set((state) => ({
+              itemsBySource: { ...state.itemsBySource, [sourceId]: items },
+              loadedSourceIds: { ...state.loadedSourceIds, [sourceId]: true },
+            }));
+
+            return true;
+          } catch (error) {
+            if (isCurrentScope()) {
+              set({
+                lastCatalogError: { kind: 'unknown', message: error instanceof Error ? error.message : String(error) },
+              });
+            }
             return false;
+          } finally {
+            if (isCurrentRuntime()) {
+              activeSourceLoads = Math.max(0, activeSourceLoads - 1);
+              if (activeSourceLoads === 0) {
+                set({ isLoadingSource: false });
+              }
+            }
           }
+        })();
 
-          const items = payload?.items || [];
-          const nextCursor = payload?.nextCursor ?? null;
-
-          set((state) => ({
-            itemsBySource: { ...state.itemsBySource, [sourceId]: items },
-            pageInfoBySource: { ...state.pageInfoBySource, [sourceId]: { nextCursor } },
-            loadedSourceIds: { ...state.loadedSourceIds, [sourceId]: true },
-            clawdhubHasMoreBySource: {
-              ...state.clawdhubHasMoreBySource,
-              [sourceId]: items.length > 0,
-            },
-          }));
-
-          return true;
-        } catch (error) {
-          set({
-            lastCatalogError: { kind: 'unknown', message: error instanceof Error ? error.message : String(error) },
-          });
-          return false;
-        } finally {
-          set({ isLoadingSource: false });
-        }
-      },
-
-      loadMoreClawdHub: async () => {
-        const selectedSourceId = get().selectedSourceId;
-        if (!selectedSourceId) {
-          return false;
-        }
-
-        const pageInfo = get().pageInfoBySource[selectedSourceId];
-        const cursor = pageInfo?.nextCursor || null;
-
-        set({ isLoadingMore: true });
+        sourceLoadInFlight.set(sourceKey, request);
         try {
-          const currentDirectory = getRequestDirectory();
-          const parts = [`sourceId=${encodeURIComponent(selectedSourceId)}`];
-          if (currentDirectory) {
-            parts.push(`directory=${encodeURIComponent(currentDirectory)}`);
-          }
-          if (cursor) {
-            parts.push(`cursor=${encodeURIComponent(cursor)}`);
-          }
-          const queryParams = `?${parts.join('&')}`;
-
-          const response = await runtimeFetch(`/api/config/skills/catalog/source${queryParams}`, {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-          });
-
-          const payload = (await response.json().catch(() => null)) as SkillsCatalogSourceResponse | null;
-          if (!response.ok || !payload?.ok) {
-            return false;
-          }
-
-          const nextCursor = payload.nextCursor ?? null;
-          const currentItems = get().itemsBySource[selectedSourceId] || [];
-          const items = payload.items || [];
-          const merged = new Map(currentItems.map((item) => [`${item.sourceId}:${item.skillDir}`, item]));
-          let newCount = 0;
-
-          for (const item of items) {
-            const key = `${item.sourceId}:${item.skillDir}`;
-            if (!merged.has(key)) {
-              newCount += 1;
-            }
-            merged.set(key, item);
-          }
-
-          const noMore = items.length === 0 || newCount === 0;
-
-          set((state) => ({
-            itemsBySource: {
-              ...state.itemsBySource,
-              [selectedSourceId]: Array.from(merged.values()),
-            },
-            pageInfoBySource: {
-              ...state.pageInfoBySource,
-              [selectedSourceId]: { nextCursor },
-            },
-            clawdhubHasMoreBySource: {
-              ...state.clawdhubHasMoreBySource,
-              [selectedSourceId]: !noMore,
-            },
-          }));
-
-          return true;
-        } catch {
-          return false;
+          return await request;
         } finally {
-          set({ isLoadingMore: false });
+          if (sourceLoadInFlight.get(sourceKey) === request) {
+            sourceLoadInFlight.delete(sourceKey);
+          }
         }
       },
 

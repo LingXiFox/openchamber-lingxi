@@ -89,7 +89,7 @@ which requests only providers enabled for this panel.
 | Context + cost | `contextUsage.ts` over `useSessionMessages`, `Session.cost` | see below — the store getters cannot serve this |
 | Branch, ahead/behind, attention | `useGitStore` directory state | warmed via `runBackgroundNetworkTask(ensureStatus)` and refreshed from Git mutation hints |
 | Changed files | `useGitStore` status `files` + `diffStats` | working tree, not session-authored edits |
-| PR + checks | `usePrVisualSummary` | **read-only** |
+| PR + checks | `usePrVisualSummaryForBranchAndRemote` | **read-only**; follows the current branch's tracked remote |
 | Subagents | child sessions from `useAllLiveSessions` (`parentID`) + `useAllSessionStatuses` | |
 | Subagent blockers | directory `permission` / `question` maps | one subscription covers every child |
 | Usage | `components/usage/usageGroups.ts` over `useQuotaStore` | grouping shared with the mobile popover; presentation is not |
@@ -145,6 +145,9 @@ The panel never calls `startWatching`. PR watching is owned by the background
 tracker, and its concurrency gate exists because per-consumer PR fetches once
 saturated the browser's connection pool and stalled startup for ~20s. A panel
 that started a watch per open session would reintroduce exactly that fan-out.
+The panel reads only the branch's tracked remote. A repository can have the
+same branch name on origin and upstream with different PRs, so freshness cannot
+cross remote boundaries.
 
 ### Changed files come from git status, not the session
 
