@@ -38,7 +38,7 @@ describe("GitHub PR status cache ownership", () => {
     expect(new Set([originA, upstreamA, originB]).size).toBe(3)
   })
 
-  test("branch readers keep origin and upstream statuses isolated", () => {
+  test("branch readers keep origin selected even when upstream is newer", () => {
     const upstream = getGitHubPrStatusKey("/repo", "feature", "upstream")
     const origin = getGitHubPrStatusKey("/repo", "feature", "origin")
     useGitHubPrStatusStore.getState().ensureEntry(upstream)

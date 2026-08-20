@@ -23,6 +23,7 @@ import {
   WorkStatusValue,
 } from './WorkStatusPrimitives';
 import { useReportWorkStatusPresence } from './presenceContext';
+import { getWorkStatusPrRemoteName } from './workStatusPrRemote';
 
 type Props = {
   sessionId: string | null;
@@ -85,9 +86,7 @@ export const WorkStatusPrimaryGroup: React.FC<Props> = ({ sessionId, directory, 
   }, [clearDiffCache, directory, fetchStatus, git, showRepository]);
 
   const branch = gitStatus?.current?.trim() || null;
-  const remoteName = gitStatus?.upstreamComparison?.remote
-    ?? gitStatus?.tracking?.split('/')[0]
-    ?? null;
+  const remoteName = getWorkStatusPrRemoteName(gitStatus?.tracking);
 
   const availableWorktreesByProject = useSessionUIStore((state) => state.availableWorktreesByProject);
   // Worktrees normally sit beside rather than beneath their project directory,
