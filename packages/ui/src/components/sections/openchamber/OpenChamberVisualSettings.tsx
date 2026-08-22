@@ -27,6 +27,18 @@ import {
 } from '@/lib/desktop';
 import { useDeviceInfo } from '@/lib/device';
 import { usePwaDetection } from '@/hooks/usePwaDetection';
+import {
+    canUseDesktopBackgroundAppearance,
+    clearDesktopBackground,
+    importDesktopBackground,
+    previewDesktopBackground,
+    updateDesktopBackground,
+    useDesktopBackgroundAppearance,
+    type DesktopBackgroundFit,
+    type DesktopBackgroundPatch,
+    type DesktopBackgroundPosition,
+    type DesktopBackgroundReadability,
+} from '@/hooks/useDesktopBackgroundAppearance';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { CODE_FONT_OPTIONS, DEFAULT_MONO_FONT, DEFAULT_UI_FONT, UI_FONT_OPTIONS, type MonoFontOption, type UiFontOption } from '@/lib/fontOptions';
 import { useI18n, type Locale } from '@/lib/i18n';
@@ -267,7 +279,7 @@ const normalizeUserMessageRenderingMode = (mode: unknown): 'markdown' | 'plain' 
     return mode === 'markdown' ? 'markdown' : 'plain';
 };
 
-type VisibleSetting = 'sessionAssist' | 'sessionGoal' | 'theme' | 'windowControlsPosition' | 'pwaInstallName' | 'pwaOrientation' | 'mobileKeyboardMode' | 'timeFormat' | 'weekStart' | 'fontSize' | 'terminalFontSize' | 'terminalShell' | 'terminalLoginShell' | 'editorFontSize' | 'spacing' | 'inputBarOffset' | 'mermaidRendering' | 'userMessageRendering' | 'chatRenderMode' | 'messageTransport' | 'activityRenderMode' | 'collapsibleUserMessages' | 'stickyUserHeader' | 'promptNavigatorEnabled' | 'wideChatLayout' | 'codeBlockLineWrap' | 'splitAssistantMessageActions' | 'subagentReadOnlyBanner' | 'diffLayout' | 'mobileStatusBar' | 'dotfiles' | 'fileViewerPreview' | 'reasoning' | 'showToolFileIcons' | 'showTurnChangedFiles' | 'expandedTools' | 'followUpBehavior' | 'terminalQuickKeys' | 'fileEditorKeymap' | 'persistDraft' | 'inputSpellcheck' | 'reportUsage' | 'autoSaveEnabled' | 'sessionTabs';
+type VisibleSetting = 'sessionAssist' | 'sessionGoal' | 'theme' | 'background' | 'windowControlsPosition' | 'pwaInstallName' | 'pwaOrientation' | 'mobileKeyboardMode' | 'timeFormat' | 'weekStart' | 'fontSize' | 'terminalFontSize' | 'terminalShell' | 'terminalLoginShell' | 'editorFontSize' | 'spacing' | 'inputBarOffset' | 'mermaidRendering' | 'userMessageRendering' | 'chatRenderMode' | 'messageTransport' | 'activityRenderMode' | 'collapsibleUserMessages' | 'stickyUserHeader' | 'promptNavigatorEnabled' | 'wideChatLayout' | 'codeBlockLineWrap' | 'splitAssistantMessageActions' | 'subagentReadOnlyBanner' | 'diffLayout' | 'mobileStatusBar' | 'dotfiles' | 'fileViewerPreview' | 'reasoning' | 'showToolFileIcons' | 'showTurnChangedFiles' | 'expandedTools' | 'followUpBehavior' | 'terminalQuickKeys' | 'fileEditorKeymap' | 'persistDraft' | 'inputSpellcheck' | 'reportUsage' | 'autoSaveEnabled' | 'sessionTabs';
 
 const WINDOW_CONTROLS_POSITION_OPTIONS: Array<{ id: DesktopWindowControlsPosition; labelKey: string }> = [
     { id: 'left', labelKey: 'settings.openchamber.desktopNetwork.option.windowControlsLeft' },
@@ -399,6 +411,14 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
     } = useThemeSystem();
 
     const [themesReloading, setThemesReloading] = React.useState(false);
+    const desktopBackground = useDesktopBackgroundAppearance();
+    const [backgroundBusy, setBackgroundBusy] = React.useState(false);
+    const [backgroundError, setBackgroundError] = React.useState('');
+    const saveDesktopBackground = (patch: DesktopBackgroundPatch) => {
+        setBackgroundError('');
+        void updateDesktopBackground(patch)
+            .catch(() => setBackgroundError(t('settings.openchamber.visual.background.error')));
+    };
 
     // macOS-desktop-only dock badge that counts chats with unseen activity.
     // The tray sync (mac-only) pumps the count to the main process, so the
@@ -613,11 +633,12 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
 
     const isVSCode = isVSCodeRuntime();
     const hasThemeSettings = shouldShow('theme') && !isVSCode;
+    const showDesktopBackgroundSetting = shouldShow('background') && canUseDesktopBackgroundAppearance();
     const showWindowControlsPositionSetting = shouldShow('windowControlsPosition') && showWindowControlsPosition;
     const hasLocalizationSettings = shouldShow('theme') || shouldShow('timeFormat') || shouldShow('weekStart');
     const hasAppearanceSettings = isVSCode
         ? hasLocalizationSettings
-        : (shouldShow('theme') || showWindowControlsPositionSetting || shouldShow('pwaInstallName') || shouldShow('pwaOrientation') || shouldShow('timeFormat') || shouldShow('weekStart'));
+        : (shouldShow('theme') || showDesktopBackgroundSetting || showWindowControlsPositionSetting || shouldShow('pwaInstallName') || shouldShow('pwaOrientation') || shouldShow('timeFormat') || shouldShow('weekStart'));
     const hasLayoutSettings = shouldShow('fontSize') || shouldShow('terminalFontSize') || shouldShow('editorFontSize') || shouldShow('spacing') || (shouldShow('inputBarOffset') && isMobile);
     const hasNavigationSettings = (shouldShow('terminalQuickKeys') && !isMobile) || ((shouldShow('terminalShell') || shouldShow('terminalLoginShell')) && !isVSCode) || shouldShow('fileEditorKeymap') || shouldShow('autoSaveEnabled') || (shouldShow('sessionTabs') && !isVSCode && !isMobile);
     const hasBehaviorSettings = shouldShow('mermaidRendering')
@@ -938,6 +959,145 @@ export const OpenChamberVisualSettings: React.FC<OpenChamberVisualSettingsProps>
                                         />
                                     </SettingsInset>
                                 )}
+                            </SettingsSection>
+                        )}
+
+                        {showDesktopBackgroundSetting && desktopBackground && (
+                            <SettingsSection
+                                title={t('settings.openchamber.visual.background.title')}
+                                info={t('settings.openchamber.visual.background.description')}
+                                divider={hasThemeSettings}
+                            >
+                                <div className={SETTINGS_FIELDS_STACK_CLASS}>
+                                    <SettingsFieldRow
+                                        label={t('settings.openchamber.visual.background.image')}
+                                        alignEnd={false}
+                                        settingsItem="appearance.background"
+                                    >
+                                        <div className={SETTINGS_CONTROL_CLUSTER_CLASS}>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                disabled={backgroundBusy}
+                                                onClick={() => {
+                                                    setBackgroundBusy(true);
+                                                    setBackgroundError('');
+                                                    void importDesktopBackground()
+                                                        .catch(() => setBackgroundError(t('settings.openchamber.visual.background.error')))
+                                                        .finally(() => setBackgroundBusy(false));
+                                                }}
+                                            >
+                                                {desktopBackground.assetId
+                                                    ? t('settings.openchamber.visual.background.replace')
+                                                    : t('settings.openchamber.visual.background.choose')}
+                                            </Button>
+                                            {desktopBackground.assetId && (
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    disabled={backgroundBusy}
+                                                    onClick={() => {
+                                                        setBackgroundBusy(true);
+                                                        setBackgroundError('');
+                                                        void clearDesktopBackground()
+                                                            .catch(() => setBackgroundError(t('settings.openchamber.visual.background.error')))
+                                                            .finally(() => setBackgroundBusy(false));
+                                                    }}
+                                                >
+                                                    {t('settings.openchamber.visual.background.remove')}
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </SettingsFieldRow>
+                                    {desktopBackground.fileName && (
+                                        <p className="typography-settings-description text-muted-foreground">
+                                            {desktopBackground.fileName}
+                                            {desktopBackground.width && desktopBackground.height
+                                                ? ` · ${desktopBackground.width} × ${desktopBackground.height}`
+                                                : ''}
+                                        </p>
+                                    )}
+                                    {backgroundError && <p className="typography-settings-description text-destructive">{backgroundError}</p>}
+
+                                    <SettingsStackedField
+                                        label={t('settings.openchamber.visual.background.opacity')}
+                                        settingsItem="appearance.background-opacity"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <input
+                                                type="range"
+                                                min="70"
+                                                max="100"
+                                                step="1"
+                                                value={Math.round(desktopBackground.panelOpacity * 100)}
+                                                onChange={(event) => previewDesktopBackground({ panelOpacity: Number(event.target.value) / 100 })}
+                                                onPointerUp={(event) => saveDesktopBackground({ panelOpacity: Number(event.currentTarget.value) / 100 })}
+                                                onBlur={(event) => saveDesktopBackground({ panelOpacity: Number(event.currentTarget.value) / 100 })}
+                                                className="min-w-0 flex-1 accent-primary"
+                                                aria-label={t('settings.openchamber.visual.background.opacity')}
+                                            />
+                                            <span className="w-10 text-right tabular-nums text-sm text-muted-foreground">
+                                                {Math.round(desktopBackground.panelOpacity * 100)}%
+                                            </span>
+                                        </div>
+                                    </SettingsStackedField>
+
+                                    <SettingsTwoColumn>
+                                        <SettingsStackedField label={t('settings.openchamber.visual.background.readability')}>
+                                            <Select
+                                                value={desktopBackground.readability}
+                                                onValueChange={(value: DesktopBackgroundReadability) => saveDesktopBackground({ readability: value })}
+                                            >
+                                                <SelectTrigger size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_TRIGGER_CLASS}>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="weak">{t('settings.openchamber.visual.background.readability.weak')}</SelectItem>
+                                                    <SelectItem value="standard">{t('settings.openchamber.visual.background.readability.standard')}</SelectItem>
+                                                    <SelectItem value="strong">{t('settings.openchamber.visual.background.readability.strong')}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </SettingsStackedField>
+                                        <SettingsCheckboxRow
+                                            checked={desktopBackground.blur}
+                                            onChange={(blur) => saveDesktopBackground({ blur })}
+                                            label={t('settings.openchamber.visual.background.blur')}
+                                            ariaLabel={t('settings.openchamber.visual.background.blur')}
+                                        />
+                                    </SettingsTwoColumn>
+
+                                    <SettingsTwoColumn>
+                                        <SettingsStackedField label={t('settings.openchamber.visual.background.fit')}>
+                                            <Select
+                                                value={desktopBackground.fit}
+                                                onValueChange={(fit: DesktopBackgroundFit) => saveDesktopBackground({ fit })}
+                                            >
+                                                <SelectTrigger size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_TRIGGER_CLASS}><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="cover">{t('settings.openchamber.visual.background.fit.cover')}</SelectItem>
+                                                    <SelectItem value="contain">{t('settings.openchamber.visual.background.fit.contain')}</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </SettingsStackedField>
+                                        <SettingsStackedField label={t('settings.openchamber.visual.background.position')}>
+                                            <Select
+                                                value={desktopBackground.position}
+                                                onValueChange={(position: DesktopBackgroundPosition) => saveDesktopBackground({ position })}
+                                            >
+                                                <SelectTrigger size={SETTINGS_SELECT_SIZE} className={SETTINGS_SELECT_TRIGGER_CLASS}><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {(['center', 'top', 'bottom', 'left', 'right'] as const).map((position) => (
+                                                        <SelectItem key={position} value={position}>
+                                                            {tUnsafe(`settings.openchamber.visual.background.position.${position}`)}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </SettingsStackedField>
+                                    </SettingsTwoColumn>
+                                </div>
                             </SettingsSection>
                         )}
 

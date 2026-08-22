@@ -24,6 +24,7 @@ import { useDeviceInfo } from '@/lib/device';
 import { cn } from '@/lib/utils';
 import { lazyWithChunkRecovery } from '@/lib/chunkLoadRecovery';
 import { useSessionListSync } from '@/components/session/sidebar/list/useSessionListSync';
+import { useDesktopBackgroundAppearance } from '@/hooks/useDesktopBackgroundAppearance';
 
 import { ChatView } from '@/components/views/ChatView';
 
@@ -37,6 +38,8 @@ const SettingsWindow = lazyWithChunkRecovery(() => import('@/components/views/Se
  */
 export const MainLayout: React.FC = () => {
     useSessionListSync({ isVSCode: false });
+    const desktopBackground = useDesktopBackgroundAppearance();
+    const desktopBackgroundActive = Boolean(desktopBackground?.assetUrl);
     const isSidebarOpen = useUIStore((state) => state.isSidebarOpen);
     const setIsMobile = useUIStore((state) => state.setIsMobile);
     const isSettingsDialogOpen = useUIStore((state) => state.isSettingsDialogOpen);
@@ -81,6 +84,20 @@ export const MainLayout: React.FC = () => {
     useUpdatePolling();
 
     React.useEffect(() => {
+        const root = document.documentElement;
+        root.classList.toggle('desktop-background-active', desktopBackgroundActive);
+        if (desktopBackgroundActive && desktopBackground) {
+            root.style.setProperty('--oc-desktop-panel-opacity', `${desktopBackground.panelOpacity * 100}%`);
+        } else {
+            root.style.removeProperty('--oc-desktop-panel-opacity');
+        }
+        return () => {
+            root.classList.remove('desktop-background-active');
+            root.style.removeProperty('--oc-desktop-panel-opacity');
+        };
+    }, [desktopBackground, desktopBackgroundActive]);
+
+    React.useEffect(() => {
         const previous = useUIStore.getState().isMobile;
         if (previous !== isMobile) {
             setIsMobile(isMobile);
@@ -91,7 +108,17 @@ export const MainLayout: React.FC = () => {
         <DiffWorkerProvider>
             <div
                 data-page-scroll-lock="true"
-                className="main-content-safe-area relative flex h-[100dvh] bg-background"
+                className={cn(
+                    'main-content-safe-area relative flex h-[100dvh] bg-background',
+                    desktopBackgroundActive && 'desktop-background-surface',
+                    desktopBackgroundActive && desktopBackground?.blur && 'desktop-background-blur',
+                )}
+                data-desktop-background-readability={desktopBackgroundActive ? desktopBackground?.readability : undefined}
+                style={desktopBackground?.assetUrl ? {
+                    backgroundImage: `linear-gradient(var(--oc-desktop-background-scrim), var(--oc-desktop-background-scrim)), url("${desktopBackground.assetUrl}")`,
+                    backgroundPosition: desktopBackground.position,
+                    backgroundSize: desktopBackground.fit,
+                } : undefined}
             >
                 <CommandPalette />
                 <HelpDialog />
@@ -106,12 +133,12 @@ export const MainLayout: React.FC = () => {
                     <Sidebar
                         isOpen={isSidebarOpen}
                         isMobile={isMobile}
-                        className="border-border"
+                        className="desktop-background-panel border-border"
                         topBar={<SidebarTopBar />}
                     >
                         <SessionSidebar isVisible={isSidebarOpen} />
                     </Sidebar>
-                    <div className="relative flex flex-1 min-w-0 flex-col overflow-hidden bg-background" data-page-scroll-lock="true">
+                    <div className="desktop-background-panel relative flex flex-1 min-w-0 flex-col overflow-hidden bg-background" data-page-scroll-lock="true">
                         <Header />
                         <div className="relative flex flex-1 min-h-0 overflow-hidden bg-background" data-page-scroll-lock="true">
                             <div className="relative flex flex-1 min-w-0 flex-col overflow-hidden border-t border-border bg-background" data-page-scroll-lock="true">
