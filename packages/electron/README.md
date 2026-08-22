@@ -82,6 +82,20 @@ Build output goes to `packages/electron/dist`.
 
 macOS builds produce `dmg` and `zip` artifacts. Windows builds produce an NSIS installer. Linux builds produce an AppImage for the native x64 or arm64 host.
 
+### Remote macOS Build From Linux
+
+The Linux workspace remains the source of truth. To incrementally synchronize it to the isolated `macos-host` build directory, build with the local self-signed identity, verify the app signature, and copy the artifacts back under `artifacts/macos`, run:
+
+```bash
+bun run electron:build:macos:remote
+```
+
+The first run installs pinned Bun and Node.js binaries under `/Users/macserver/Build/OpenChamber-LingXiFox/tools` after checking their SHA-256 hashes. Project dependencies, download caches, temporary files, the source mirror, and remote artifacts stay below that build root. Git data, local environment files, dependencies, generated output, mobile, docs, and VS Code sources are not synchronized.
+
+The signing certificate path must be provided through the `OPENCHAMBER_MACOS_P12_PATH` environment variable, with identity `LingXiFox Code Signing`. The script reads the P12 password without echo and passes it over SSH without writing it to disk. Electron Builder imports it into a temporary keychain and deletes that keychain after the build. Local self-signed builds explicitly disable Apple notarization and secure timestamps; they are suitable for controlled machines that trust this certificate, not public distribution through Gatekeeper.
+
+Use `./scripts/build-macos-remote.sh --check` for a toolchain and P12 check, `--arch x64` for an Intel artifact, or the environment variables `OPENCHAMBER_MACOS_HOST`, `OPENCHAMBER_MACOS_BUILD_ROOT`, `OPENCHAMBER_MACOS_P12_PATH`, and `OPENCHAMBER_MACOS_SIGNING_IDENTITY` to override local defaults.
+
 ### LingXiFox Desktop Identity
 
 Downstream builds install as `OpenChamber LingXiFox` with bundle ID `com.lingxifox.openchamber`, so the macOS bundle is `OpenChamber LingXiFox.app` and can coexist with the official app. This package identity intentionally still shares the existing OpenChamber configuration and data paths, including `~/.config/openchamber`; do not run both desktop apps concurrently while they share writable state.
