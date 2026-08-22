@@ -45,6 +45,7 @@ export const SettingsWindow: React.FC<SettingsWindowProps> = ({ open, onOpenChan
         />
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
           <Dialog.Popup
+            data-desktop-background-modal="true"
             aria-describedby={descriptionId}
             className={cn(
               'relative pointer-events-auto',

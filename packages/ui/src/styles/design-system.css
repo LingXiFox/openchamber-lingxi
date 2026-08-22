@@ -22,6 +22,7 @@
     --oc-glass-popover-opacity: 50%;
     --oc-glass-tooltip-opacity: 62%;
     --oc-glass-saturation: 1.24;
+    --oc-desktop-background-scrim: rgb(255 255 255 / 0.18);
 
     /* Semantic typography defaults (must match SEMANTIC_TYPOGRAPHY) */
     --text-markdown: 0.9375rem;
@@ -74,6 +75,7 @@
     --oc-glass-popover-opacity: 52%;
     --oc-glass-tooltip-opacity: 64%;
     --oc-glass-saturation: 1.16;
+    --oc-desktop-background-scrim: rgb(0 0 0 / 0.24);
     /* Default Dark Theme - using OKLCH color space */
     --background: oklch(0.16 0.01 30); /* #151313 */
     --foreground: oklch(0.85 0.02 90); /* #cdccc3 */
@@ -142,6 +144,44 @@
   :root.desktop-runtime #root {
     background: var(--background) !important;
     background-color: var(--background) !important;
+  }
+
+  .desktop-background-surface {
+    background-color: transparent !important;
+    background-repeat: no-repeat;
+  }
+
+  .desktop-background-surface[data-desktop-background-readability='weak'] {
+    --oc-desktop-background-scrim: rgb(255 255 255 / 0.1);
+  }
+
+  .dark .desktop-background-surface[data-desktop-background-readability='weak'] {
+    --oc-desktop-background-scrim: rgb(0 0 0 / 0.14);
+  }
+
+  .desktop-background-surface[data-desktop-background-readability='strong'] {
+    --oc-desktop-background-scrim: rgb(255 255 255 / 0.3);
+  }
+
+  .dark .desktop-background-surface[data-desktop-background-readability='strong'] {
+    --oc-desktop-background-scrim: rgb(0 0 0 / 0.38);
+  }
+
+  .desktop-background-active .desktop-background-panel {
+    background-color: color-mix(in srgb, var(--background) var(--oc-desktop-panel-opacity), transparent) !important;
+  }
+
+  .desktop-background-active .desktop-background-panel .bg-background {
+    background-color: transparent !important;
+  }
+
+  .desktop-background-blur .desktop-background-panel {
+    backdrop-filter: blur(var(--oc-glass-blur)) saturate(var(--oc-glass-saturation));
+  }
+
+  .desktop-background-active [data-desktop-background-modal='true'] {
+    background-color: color-mix(in srgb, var(--background) 92%, transparent) !important;
+    backdrop-filter: blur(var(--oc-glass-blur)) saturate(var(--oc-glass-saturation));
   }
 
   .font-sans {
