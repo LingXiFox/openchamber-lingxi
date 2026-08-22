@@ -19,6 +19,7 @@ The preload bridge exposes desktop-only APIs to the web UI through `window.__OPE
 | File | Purpose |
 |------|---------|
 | `main.mjs` | Electron main process, app lifecycle, windows, menus, deep links, native IPC handlers, updates, local server startup |
+| `background-appearance.mjs` | Workspace-scoped desktop background preference validation and managed-asset references |
 | `startup-url-selection.mjs` | Pure bundled/HMR startup probe and loopback connection-limit policy |
 | `preload.mjs` | Safe bridge from the rendered UI to Electron IPC |
 | `ssh-manager.mjs` | SSH host import, connection lifecycle, tunnel/port forwarding helpers |
@@ -149,6 +150,7 @@ Use an explicit override when testing a different OpenCode CLI build or when a u
 - Floating Mini Chat windows.
 - Multiple native windows.
 - Native notifications.
+- Workspace-scoped local background images. Electron validates and copies JPEG, PNG, or WebP files into managed app data and exposes only referenced assets through a read-only protocol; remote renderers cannot use the related IPC commands.
 - User-confirmed local folder selection. The shared UI supplies the requested directory as the picker `defaultPath`; confirmation is required before filesystem access is retried.
 - One-click open/reveal/open-in-app actions.
 - Desktop host switcher and deep-link imports.
