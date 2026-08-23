@@ -19,7 +19,7 @@ These provider IDs are currently dispatchable via `fetchQuotaForProvider(provide
 | --- | --- | --- | --- |
 | `claude` | Claude | `providers/claude/` | Claude Code Keychain entry, Claude Code credentials file, OpenCode `auth.json` (`anthropic`, `claude`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | `codex` | Codex | `providers/codex.js` | `openai`, `codex`, `chatgpt` |
-| `sub2api` | Sub2API | `providers/sub2api.js` | Managed local credential, then `SUB2API_BASE_URL` and `SUB2API_ACCESS_TOKEN` |
+| `sub2api` | Sub2API | `providers/sub2api.js` | Read-only account map in `quota/sub2api.json`; legacy `sub2api` account fallback via `SUB2API_BASE_URL` and `SUB2API_ACCESS_TOKEN` |
 | `command-code` | Command Code | `providers/command-code.js` | `command-code` OAuth/API credential in OpenCode `auth.json`, or `COMMAND_CODE_API_KEY` |
 | `cursor` | Cursor | `providers/cursor.js` | Environment/token files, OpenChamber-managed credentials, or explicit one-time Cursor import |
 | `crof` | CrofAI | `providers/crof.js` | `crof` (API key under `key` or `token`) |
@@ -46,7 +46,7 @@ These provider IDs are currently dispatchable via `fetchQuotaForProvider(provide
 ## Response contract
 All providers should return results via shared helpers to preserve API shape:
 - Required fields: `providerId`, `providerName`, `ok`, `configured`, `usage`, `fetchedAt`
-- Optional field: `error`
+- Optional fields: `error`, and `accountId` for account-scoped providers
 - Unsupported provider requests should return `ok: false`, `configured: false`, `error: Unsupported provider`
 
 Provider modules must export `providerId`, `providerName`, `aliases`, `isConfigured(auth?)`, and `fetchQuota()`.
@@ -82,7 +82,25 @@ Claude quota reports the subscription limits Claude Code itself is bound by, rea
 
 ## Sub2API quota semantics
 
-Sub2API reads a managed local credential from `~/.config/openchamber/quota/sub2api.json` before falling back to `SUB2API_BASE_URL` and `SUB2API_ACCESS_TOKEN`; the token is a Sub2API panel JWT and is never returned to the UI. Electron calls the provider through local IPC even when displaying a remote runtime, so the JWT is never sent to that runtime. `GET /api/v1/user/profile` supplies the current `balance`. `GET /api/v1/payment/orders/my` is paginated to calculate net balance-recharge total: completed orders contribute `amount`, partial refunds contribute `max(amount - refund_amount, 0)`, and full refunds contribute zero. API keys for model calls cannot authenticate these requests. When non-payment sources leave a positive balance with no payment-order total, the provider reports the total as unknown rather than inventing one. VS Code does not implement or show the Sub2API provider.
+Sub2API reads a user-maintained, read-only account map from `~/.config/openchamber/quota/sub2api.json`. `accounts` is keyed by the exact OpenCode provider key, and each value contains the Sub2API panel API `baseUrl` and panel JWT `accessToken`:
+
+```json
+{
+  "accounts": {
+    "HappyCode": {
+      "baseUrl": "https://sub2api.example",
+      "accessToken": "panel-jwt",
+      "refreshToken": "rt-panel-token"
+    }
+  }
+}
+```
+
+OpenChamber never creates this mapping through its API, but it does rewrite token fields inside the matching account entry: Sub2API access JWTs expire after ~24 hours, so on a 401 the provider rotates the pair via `POST /api/v1/auth/refresh` using the stored `refreshToken` and atomically persists the new tokens back into the same account entry (0600). Each account value contains the panel API `baseUrl`, an optional `accessToken`, and an optional long-lived `refreshToken`; at least one token is required. The initial `refreshToken` comes from the panel website's Local Storage (`refresh_token`). The former single-account file shape and `SUB2API_BASE_URL` / `SUB2API_ACCESS_TOKEN` remain read-only fallbacks only when the current OpenCode provider key is exactly `sub2api`. The panel URL does not alter OpenCode's model API base URL. Tokens are never returned to the UI. Electron calls the provider through local IPC even when displaying a remote runtime, so credentials are never sent to that runtime. Requests and in-memory result matching are scoped by both quota provider ID and OpenCode account ID. A missing or malformed mapping is reported explicitly and never treated as an empty successful quota.
+
+The credits window models the wallet since the latest completed balance recharge: numerator is the actual paid cost (`actual_cost`) consumed since that recharge moment, denominator is that consumption plus the current balance — the wallet level when the recharge landed — so every recharge resets the denominator instead of growing it forever. Negative (overdrawn) balances are clamped to zero and such a cycle reads as 100% used; without any recharge history only the absolute balance is shown with no percentage.
+
+`GET /api/v1/user/profile` supplies the current balance. `GET /api/v1/payment/orders/my?page=1` supplies the latest recharge timestamp, and `GET /api/v1/usage?start_date=...` is paginated to sum paid consumption up to that moment. API keys for model calls cannot authenticate these requests. VS Code does not implement or show the Sub2API provider.
 
 ## MiniMax M3 / Token Plan migration
 

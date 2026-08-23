@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { deleteLegacyOpenCodeGoCredential, deleteQuotaCredential, readQuotaCredential, writeQuotaCredential } from './store.js';
-import { getManagedCredentialStatus, writeManagedCredential } from './providers.js';
+import { writeManagedCredential } from './providers.js';
 
 const previousDataDir = process.env.OPENCHAMBER_DATA_DIR;
 const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'openchamber-quota-store-'));
@@ -19,11 +19,15 @@ describe('quota credential store', () => {
     deleteQuotaCredential('ollama-cloud');
   });
 
-  it('stores Sub2API credentials locally without returning the JWT', () => {
-    writeManagedCredential('sub2api', { baseUrl: 'https://sub2api.example/', accessToken: 'panel-jwt' });
+  it('keeps Sub2API configuration read-only', () => {
+    expect(() => writeManagedCredential('sub2api', {
+      baseUrl: 'https://sub2api.example/',
+      accessToken: 'panel-jwt',
+    })).toThrow('Unsupported credential provider');
+    writeQuotaCredential('sub2api', {
+      accounts: { HappyCode: { baseUrl: 'https://sub2api.example/', accessToken: 'panel-jwt' } },
+    });
     expect(fs.statSync(path.join(temporaryDirectory, 'quota', 'sub2api.json')).mode & 0o777).toBe(0o600);
-    expect(getManagedCredentialStatus('sub2api')).toEqual({ configured: true, secretMasked: '••••••••' });
-    expect(JSON.stringify(getManagedCredentialStatus('sub2api'))).not.toContain('panel-jwt');
     deleteQuotaCredential('sub2api');
   });
 

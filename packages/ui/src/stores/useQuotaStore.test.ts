@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { ProviderResult } from '@/types';
 import { getVisibleQuotaProviders } from '@/lib/quota';
-import { fetchProviderQuotaResult } from './useQuotaStore';
+import { fetchProviderQuotaResult, findQuotaResult } from './useQuotaStore';
 
 const sub2ApiResult: ProviderResult = {
   providerId: 'sub2api',
+  accountId: 'HappyCode',
   providerName: 'Sub2API',
   ok: true,
   configured: true,
@@ -26,6 +27,13 @@ const sub2ApiResult: ProviderResult = {
 };
 
 describe('quota store Sub2API routing', () => {
+  test('matches Sub2API results by exact OpenCode provider key', () => {
+    const otherResult = { ...sub2ApiResult, accountId: 'OtherCode' };
+
+    expect(findQuotaResult([otherResult, sub2ApiResult], 'sub2api', 'HappyCode')).toBe(sub2ApiResult);
+    expect(findQuotaResult([otherResult], 'sub2api', 'HappyCode')).toBe(undefined);
+  });
+
   test('uses local Electron IPC without requesting the active runtime', async () => {
     let runtimeFetchCalls = 0;
     let invokeDesktopCalls = 0;
@@ -33,13 +41,14 @@ describe('quota store Sub2API routing', () => {
       runtimeFetchCalls += 1;
       throw new Error('remote runtime must not receive the JWT');
     };
-    const invokeDesktop = async (command: string) => {
+    const invokeDesktop = async (command: string, args?: Record<string, unknown>) => {
       invokeDesktopCalls += 1;
       expect(command).toBe('desktop_fetch_sub2api_quota');
+      expect(args).toEqual({ accountId: 'HappyCode' });
       return sub2ApiResult;
     };
 
-    const result = await fetchProviderQuotaResult('sub2api', {
+    const result = await fetchProviderQuotaResult('sub2api', 'HappyCode', {
       runtimeFetch,
       canUseElectronDesktopIPC: () => true,
       invokeDesktop,
@@ -62,14 +71,14 @@ describe('quota store Sub2API routing', () => {
       return sub2ApiResult;
     };
 
-    const result = await fetchProviderQuotaResult('sub2api', {
+    const result = await fetchProviderQuotaResult('sub2api', 'HappyCode', {
       runtimeFetch,
       canUseElectronDesktopIPC: () => false,
       invokeDesktop,
     });
 
     expect(invokeDesktopCalls).toBe(0);
-    expect(runtimeFetchPath).toBe('/api/quota/sub2api');
+    expect(runtimeFetchPath).toBe('/api/quota/sub2api?accountId=HappyCode');
     expect(result).toEqual(sub2ApiResult);
   });
 

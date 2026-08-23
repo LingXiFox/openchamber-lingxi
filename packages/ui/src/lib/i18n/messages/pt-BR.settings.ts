@@ -1187,6 +1187,8 @@ export const settingsDict = {
   "settings.usage.page.state.noData": "Não há dados de uso disponíveis ainda.",
   "settings.usage.page.state.refreshFailedTitle": "Não foi possível atualizar os dados de uso",
   "settings.usage.page.state.providerNotConfiguredTitle": "Provedor não configurado",
+  "settings.usage.page.state.sub2ApiNoModelTitle": "Nenhum modelo Sub2API selecionado",
+  "settings.usage.page.state.sub2ApiNoModelDescription": "Troque para um modelo cujo provedor OpenCode tenha um mapeamento Sub2API em quota/sub2api.json para ver o saldo.",
   "settings.usage.page.state.providerNotConfiguredDescription": "Adicione credenciais na aba de Provedores para habilitar o seguimiento de uso.",
   "settings.usage.page.section.modelQuotas": "Cotas de modelo",
   "settings.usage.page.section.otherModels": "Outros modelos",

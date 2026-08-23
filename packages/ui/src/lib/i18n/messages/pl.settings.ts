@@ -2035,6 +2035,8 @@ export const settingsDict = {
   'settings.usage.page.state.noQuotaWindowsTitle': 'Brak raportowanych okien kwot',
   'settings.usage.page.state.providerNotConfiguredDescription': 'Dodaj dane uwierzytelniające w zakładce Dostawcy, aby włączyć śledzenie użycia.',
   'settings.usage.page.state.providerNotConfiguredTitle': 'Dostawca nie jest skonfigurowany',
+  'settings.usage.page.state.sub2ApiNoModelTitle': 'Nie wybrano modelu Sub2API',
+  'settings.usage.page.state.sub2ApiNoModelDescription': 'Przełącz na model, którego dostawca OpenCode ma mapowanie Sub2API w quota/sub2api.json, aby zobaczyć saldo.',
   'settings.usage.page.state.refreshFailedTitle': 'Nie udało się odświeżyć danych o użyciu',
   'settings.usage.sidebar.actions.refreshAria': 'Odśwież użycie',
   'settings.usage.sidebar.actions.refreshTitle': 'Odśwież użycie',
