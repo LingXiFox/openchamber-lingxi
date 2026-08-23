@@ -177,7 +177,7 @@ export const listConfiguredQuotaProviders = () => {
   return configured;
 };
 
-const fetchQuotaForProviderUncoalesced = async (providerId) => {
+const fetchQuotaForProviderUncoalesced = async (providerId, accountId) => {
   const provider = registry[providerId];
 
   if (!provider) {
@@ -191,7 +191,7 @@ const fetchQuotaForProviderUncoalesced = async (providerId) => {
   }
 
   try {
-    return await provider.fetchQuota();
+    return await provider.fetchQuota(accountId);
   } catch (error) {
     return buildResult({
       providerId: provider.providerId,
@@ -203,14 +203,15 @@ const fetchQuotaForProviderUncoalesced = async (providerId) => {
   }
 };
 
-export const fetchQuotaForProvider = (providerId) => {
-  const existing = pendingFetches.get(providerId);
+export const fetchQuotaForProvider = (providerId, accountId) => {
+  const requestKey = JSON.stringify([providerId, accountId ?? null]);
+  const existing = pendingFetches.get(requestKey);
   if (existing) return existing;
 
-  const pending = fetchQuotaForProviderUncoalesced(providerId).finally(() => {
-    if (pendingFetches.get(providerId) === pending) pendingFetches.delete(providerId);
+  const pending = fetchQuotaForProviderUncoalesced(providerId, accountId).finally(() => {
+    if (pendingFetches.get(requestKey) === pending) pendingFetches.delete(requestKey);
   });
-  pendingFetches.set(providerId, pending);
+  pendingFetches.set(requestKey, pending);
   return pending;
 };
 

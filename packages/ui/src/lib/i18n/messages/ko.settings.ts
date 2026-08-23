@@ -1210,6 +1210,8 @@ export const settingsDict = {
   'settings.usage.page.state.noData': '아직 사용량 데이터가 없습니다.',
   'settings.usage.page.state.refreshFailedTitle': '사용량 데이터를 새로고침하지 못했습니다',
   'settings.usage.page.state.providerNotConfiguredTitle': '프로바이더가 설정되지 않았습니다',
+  'settings.usage.page.state.sub2ApiNoModelTitle': 'Sub2API 모델이 선택되지 않았습니다',
+  'settings.usage.page.state.sub2ApiNoModelDescription': 'quota/sub2api.json에 Sub2API 매핑이 있는 프로바이더의 모델로 전환하면 잔액이 표시됩니다.',
   'settings.usage.page.state.providerNotConfiguredDescription': '사용량 추적을 활성화하려면 프로바이더 탭에서 인증 정보를 추가하세요.',
   'settings.usage.page.section.modelQuotas': '모델 할당량',
   'settings.usage.page.section.otherModels': '기타 모델',

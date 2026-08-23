@@ -1210,6 +1210,8 @@ export const settingsDict = {
   "settings.usage.page.state.noData": "Даних про використання ще немає.",
   "settings.usage.page.state.refreshFailedTitle": "Не вдалося оновити дані про використання",
   "settings.usage.page.state.providerNotConfiguredTitle": "Провайдер не налаштований",
+  "settings.usage.page.state.sub2ApiNoModelTitle": "Модель Sub2API не вибрано",
+  "settings.usage.page.state.sub2ApiNoModelDescription": "Перейдіть на модель, постачальник OpenCode якої має прив'язку Sub2API у quota/sub2api.json, щоб побачити баланс.",
   "settings.usage.page.state.providerNotConfiguredDescription": "Додайте облікові дані на вкладці «Провайдери», щоб увімкнути відстеження використання.",
   "settings.usage.page.section.modelQuotas": "Модельні квоти",
   "settings.usage.page.section.otherModels": "Інші моделі",

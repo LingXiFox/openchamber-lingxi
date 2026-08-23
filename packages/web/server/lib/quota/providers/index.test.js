@@ -23,4 +23,12 @@ describe('quota provider registry', () => {
     await first;
     expect(fetchQuotaForProvider('unsupported-test-provider')).not.toBe(first);
   });
+
+  it('does not coalesce different account IDs', async () => {
+    const first = fetchQuotaForProvider('unsupported-test-provider', 'first');
+    const second = fetchQuotaForProvider('unsupported-test-provider', 'second');
+
+    expect(first).not.toBe(second);
+    await Promise.all([first, second]);
+  });
 });

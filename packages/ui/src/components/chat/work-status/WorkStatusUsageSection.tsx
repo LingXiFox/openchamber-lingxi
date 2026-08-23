@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { preloadProviderLogos } from '@/hooks/useProviderLogo';
 import { formatQuotaResetLabel, formatQuotaValueLabel } from '@/lib/quota';
-import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
+import { findQuotaResult, useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useUsageProviderGroups } from '@/components/usage/usageGroups';
 import { useConfigStore } from '@/stores/useConfigStore';
@@ -60,11 +60,11 @@ export const WorkStatusUsageSection: React.FC = () => {
   React.useEffect(() => {
     if (isLoading || dropdownProviderIds.length === 0) return;
     const missingProvider = dropdownProviderIds.some(
-      (providerId) => !quotaResults.some((result) => result.providerId === providerId),
+      (providerId) => !findQuotaResult(quotaResults, providerId, currentProviderId),
     );
     if (!missingProvider) return;
     void runBackgroundNetworkTask(() => fetchQuotas(dropdownProviderIds));
-  }, [dropdownProviderIds, fetchQuotas, isLoading, quotaResults]);
+  }, [currentProviderId, dropdownProviderIds, fetchQuotas, isLoading, quotaResults]);
 
   React.useEffect(() => {
     if (groups.length === 0) return;

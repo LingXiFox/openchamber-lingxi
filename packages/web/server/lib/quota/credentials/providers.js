@@ -1,6 +1,7 @@
 import { deleteQuotaCredential, readQuotaCredential, writeQuotaCredential } from './store.js';
 
 const clean = (value) => typeof value === 'string' && !/[\r\n]/.test(value) ? value.trim() : '';
+const WRITABLE_PROVIDERS = new Set(['ollama-cloud', 'cursor']);
 
 const normalizeSub2ApiBaseUrl = (value) => {
   const baseUrl = clean(value);
@@ -29,7 +30,9 @@ export const normalizers = {
   sub2api: (value) => {
     const baseUrl = normalizeSub2ApiBaseUrl(value?.baseUrl);
     const accessToken = clean(value?.accessToken);
-    return baseUrl && accessToken ? { baseUrl, accessToken } : null;
+    const refreshToken = clean(value?.refreshToken);
+    if (!baseUrl || (!accessToken && !refreshToken)) return null;
+    return { baseUrl, accessToken, refreshToken };
   },
 };
 
@@ -39,6 +42,7 @@ export const readManagedCredential = (providerId) => {
 };
 
 export const writeManagedCredential = (providerId, value) => {
+  if (!WRITABLE_PROVIDERS.has(providerId)) throw new Error('Unsupported credential provider');
   const credential = normalizers[providerId]?.(value);
   if (!credential) throw new Error('Invalid credential');
   writeQuotaCredential(providerId, credential);
@@ -52,4 +56,7 @@ export const getManagedCredentialStatus = (providerId) => {
   return { configured: true, secretMasked: '••••••••' };
 };
 
-export const deleteManagedCredential = (providerId) => deleteQuotaCredential(providerId);
+export const deleteManagedCredential = (providerId) => {
+  if (!WRITABLE_PROVIDERS.has(providerId)) throw new Error('Unsupported credential provider');
+  deleteQuotaCredential(providerId);
+};

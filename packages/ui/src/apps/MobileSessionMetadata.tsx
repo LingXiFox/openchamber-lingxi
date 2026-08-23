@@ -10,7 +10,7 @@ import { UsageProviderCards } from '@/components/usage/UsageProviderCards';
 import { useUsageProviderGroups, type UsageProviderGroup } from '@/components/usage/usageGroups';
 import { cn } from '@/lib/utils';
 import { useConfigStore } from '@/stores/useConfigStore';
-import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
+import { findQuotaResult, useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
 import { useUIStore, type TimeFormatPreference } from '@/stores/useUIStore';
 import { useSelectionStore } from '@/sync/selection-store';
 import { useSessionMessages } from '@/sync/sync-context';
@@ -352,11 +352,11 @@ export const MobileSessionMetadataButton = React.memo(function MobileSessionMeta
   React.useEffect(() => {
     if (!open || isQuotaLoading) return;
     const missingEnabledProvider = dropdownProviderIds.some((providerId) => (
-      !quotaResults.some((result) => result.providerId === providerId)
+      !findQuotaResult(quotaResults, providerId, currentProviderId)
     ));
     if (!missingEnabledProvider) return;
     void fetchAllQuotas();
-  }, [dropdownProviderIds, fetchAllQuotas, isQuotaLoading, open, quotaResults]);
+  }, [currentProviderId, dropdownProviderIds, fetchAllQuotas, isQuotaLoading, open, quotaResults]);
 
   const latestMessageModel = React.useMemo(() => {
     for (let i = activeSessionMessages.length - 1; i >= 0; i -= 1) {

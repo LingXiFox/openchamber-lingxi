@@ -2,17 +2,15 @@ import express from 'express';
 import { deleteManagedCredential, getManagedCredentialStatus, normalizers, readManagedCredential, writeManagedCredential } from './credentials/providers.js';
 import { fetchOllamaCloudUsage } from './providers/ollama-cloud.js';
 import { importCursorCredential, validateCursorCredential } from './providers/cursor.js';
-import { validateCredential as validateSub2ApiCredential } from './providers/sub2api.js';
 
 const validators = {
   'ollama-cloud': fetchOllamaCloudUsage,
   cursor: validateCursorCredential,
-  sub2api: validateSub2ApiCredential,
 };
 
 const getProvider = (req, res) => {
   const providerId = req.params.providerId;
-  if (!normalizers[providerId]) {
+  if (!validators[providerId]) {
     res.status(404).json({ code: 'UNSUPPORTED_PROVIDER', error: 'Unsupported credential provider' });
     return null;
   }
@@ -89,7 +87,8 @@ export function registerQuotaRoutes(app, { getQuotaProviders }) {
       const { providerId } = req.params;
       if (!providerId) return res.status(400).json({ error: 'Provider ID is required' });
       const { fetchQuotaForProvider } = await getQuotaProviders();
-      res.json(await fetchQuotaForProvider(providerId));
+      const accountId = providerId === 'sub2api' ? req.query.accountId : undefined;
+      res.json(await fetchQuotaForProvider(providerId, accountId));
     } catch (error) {
       console.error('Failed to fetch quota:', error);
       res.status(500).json({ error: error.message || 'Failed to fetch quota' });

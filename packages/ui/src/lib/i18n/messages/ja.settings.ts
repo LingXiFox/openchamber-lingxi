@@ -1243,6 +1243,8 @@ export const settingsDict = {
   'settings.usage.page.state.noData': 'まだ使用量データがありません。',
   'settings.usage.page.state.refreshFailedTitle': '使用量データの更新に失敗しました',
   'settings.usage.page.state.providerNotConfiguredTitle': 'Provider が設定されていません',
+  'settings.usage.page.state.sub2ApiNoModelTitle': 'Sub2API モデルが未選択です',
+  'settings.usage.page.state.sub2ApiNoModelDescription': 'quota/sub2api.json で Sub2API マッピングのあるプロバイダーのモデルに切り替えると、残高が表示されます。',
   'settings.usage.page.state.providerNotConfiguredDescription': 'Providers タブで認証情報を追加して使用量追跡を有効にしてください。',
   'settings.usage.page.section.modelQuotas': 'モデル割り当て',
   'settings.usage.page.section.otherModels': 'その他のモデル',

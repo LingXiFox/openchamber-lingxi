@@ -14,8 +14,9 @@ import {
   useGlobalSessionsStore,
   resolveGlobalSessionDirectory,
 } from '@/stores/useGlobalSessionsStore';
-import { useQuotaStore } from '@/stores/useQuotaStore';
-import { formatWindowLabel, formatQuotaValueLabel, getVisibleQuotaProviders } from '@/lib/quota';
+import { findQuotaResult, useQuotaStore } from '@/stores/useQuotaStore';
+import { useConfigStore } from '@/stores/useConfigStore';
+import { formatQuotaGroupName, formatWindowLabel, formatQuotaValueLabel, getVisibleQuotaProviders } from '@/lib/quota';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useGitStore } from '@/stores/useGitStore';
@@ -171,15 +172,15 @@ const resolveSessionSubtitle = (
 // (the headline limits) — model breakdowns stay in the full UI.
 const buildUsage = (): TrayUsage => {
   const { results, dropdownProviderIds, displayMode } = useQuotaStore.getState();
+  const accountId = useConfigStore.getState().currentProviderId;
   const mode: TrayUsage['mode'] = displayMode === 'remaining' ? 'remaining' : 'usage';
   if (!dropdownProviderIds.length) return { mode, groups: [] };
 
-  const byProvider = new Map(results.map((result) => [result.providerId, result]));
   const groups: TrayUsageGroup[] = [];
   for (const meta of getVisibleQuotaProviders()) {
     if (!dropdownProviderIds.includes(meta.id)) continue;
-    const result = byProvider.get(meta.id);
-    if (!result || result.configured !== true) continue;
+    const result = findQuotaResult(results, meta.id, accountId);
+    if (!result?.configured) continue;
 
     const rows: TrayUsageRow[] = [];
     for (const [label, window] of Object.entries(result.usage?.windows ?? {})) {
@@ -192,7 +193,7 @@ const buildUsage = (): TrayUsage => {
       : rows.length === 0
         ? 'No rate limits reported'
         : null;
-    groups.push({ provider: meta.name, rows, status });
+    groups.push({ provider: formatQuotaGroupName(meta.name, meta.id, result.accountId), rows, status });
   }
   return { mode, groups };
 };
@@ -540,9 +541,17 @@ export const useTraySync = (): void => {
     void useQuotaStore.getState().loadSettings().then(() => {
       if (disposed) return;
       const { dropdownProviderIds, results } = useQuotaStore.getState();
+      const accountId = useConfigStore.getState().currentProviderId;
       const needsFetch = dropdownProviderIds.length > 0
-        && dropdownProviderIds.some((id) => !results.some((r) => r.providerId === id));
+        && dropdownProviderIds.some((id) => !findQuotaResult(results, id, accountId));
       if (needsFetch) void useQuotaStore.getState().fetchQuotas(dropdownProviderIds);
+    });
+    const unsubscribeConfig = useConfigStore.subscribe((state, previous) => {
+      scheduleFlush();
+      if (state.currentProviderId !== previous.currentProviderId
+        && useQuotaStore.getState().dropdownProviderIds.includes('sub2api')) {
+        void useQuotaStore.getState().fetchProviderQuota('sub2api', state.currentProviderId);
+      }
     });
 
     // Safety net: catches anything the event subscriptions miss (e.g. a store
@@ -566,6 +575,7 @@ export const useTraySync = (): void => {
       unsubscribeSessionOrder();
       unsubscribePinnedSessions();
       unsubscribeQuota();
+      unsubscribeConfig();
       unsubscribeRegistry?.();
       for (const unsub of storeUnsubs.values()) unsub();
       storeUnsubs.clear();

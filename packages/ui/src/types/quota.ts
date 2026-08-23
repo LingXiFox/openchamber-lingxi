@@ -43,6 +43,8 @@ interface ProviderUsage extends UsageWindows {
 
 export interface ProviderResult {
   providerId: QuotaProviderId;
+  /** OpenCode provider key for account-scoped quota providers. */
+  accountId?: string;
   providerName: string;
   ok: boolean;
   configured: boolean;

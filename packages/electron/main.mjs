@@ -3965,7 +3965,7 @@ const handleInvoke = async (browserWindow, command, args = {}) => {
       return clearDesktopBackground(args);
 
     case 'desktop_fetch_sub2api_quota':
-      return fetchSub2ApiQuota();
+      return fetchSub2ApiQuota(args.accountId);
 
     case 'desktop_start_window_drag':
       return null;
