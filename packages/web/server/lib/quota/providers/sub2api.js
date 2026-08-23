@@ -11,6 +11,12 @@ const PAGE_SIZE = 100;
 const AUTHENTICATION_ERROR = 'Sub2API authentication expired or invalid';
 const INVALID_RESPONSE_ERROR = 'Invalid response from provider';
 const PERSIST_FAILED_ERROR = 'Failed to persist refreshed Sub2API credentials';
+const NETWORK_ERROR = 'Could not reach the Sub2API panel';
+
+// JSON parse failures are caught inside requestJson/refreshTokens, so a
+// TypeError reaching errorResult is a fetch-level failure (DNS, connection
+// refused, TLS) rather than a malformed payload.
+const isNetworkFailure = (error) => error instanceof TypeError;
 
 const normalizeAccountId = (value) => {
   let accountId;
@@ -278,11 +284,13 @@ const errorResult = (accountId, error) => {
     configured: true,
     error: isTimeout
       ? 'Request timed out'
-      : error instanceof Error && error.message === AUTHENTICATION_ERROR
-        ? AUTHENTICATION_ERROR
-        : error instanceof Error && error.message.startsWith('Sub2API quota API returned HTTP')
-          ? error.message
-          : INVALID_RESPONSE_ERROR,
+      : isNetworkFailure(error)
+        ? NETWORK_ERROR
+        : error instanceof Error && error.message === AUTHENTICATION_ERROR
+          ? AUTHENTICATION_ERROR
+          : error instanceof Error && error.message.startsWith('Sub2API quota API returned HTTP')
+            ? error.message
+            : INVALID_RESPONSE_ERROR,
   });
 };
 
@@ -308,9 +316,9 @@ export const fetchQuotaWithCredential = async (credential, fetchImpl = fetch, ac
           // stored refresh token was already rotated and is dead. Surface it.
           return accountResult(accountId, { providerId, providerName, ok: false, configured: true, error: PERSIST_FAILED_ERROR });
         }
-        return errorResult(accountId, refreshError instanceof Error && refreshError.message === AUTHENTICATION_ERROR
-          ? refreshError
-          : INVALID_RESPONSE_ERROR);
+        // Classify the refresh failure through errorResult so timeouts and
+        // network outages keep their specific messages.
+        return errorResult(accountId, refreshError);
       }
     }
     return errorResult(accountId, error);
