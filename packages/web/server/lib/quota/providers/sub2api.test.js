@@ -269,7 +269,7 @@ describe('Sub2API account mapping and failures', () => {
     expect(result).toMatchObject({ ok: false, configured: true, error: 'Invalid response from provider' });
   });
 
-  it('handles malformed JSON and network failures without crashing', async () => {
+  it('handles malformed JSON without crashing', async () => {
     configureProvider();
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
@@ -278,10 +278,41 @@ describe('Sub2API account mapping and failures', () => {
     }));
 
     expect((await fetchQuota('sub2api')).error).toBe('Invalid response from provider');
+  });
 
+  it('classifies fetch-level network failures distinctly from bad payloads', async () => {
+    configureProvider();
+    const dnsFailure = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('getaddrinfo sub2api.example not found'), { code: 'ENOTFOUND' }),
+    });
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(dnsFailure));
+
+    expect((await fetchQuota('sub2api')).error).toBe('Could not reach the Sub2API panel');
+
+    // Unclassified errors keep the generic payload message.
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network unavailable')));
 
     expect((await fetchQuota('sub2api')).error).toBe('Invalid response from provider');
+  });
+
+  it('keeps the network error classification when the refresh call itself cannot connect', async () => {
+    writeQuotaCredential('sub2api', {
+      accounts: {
+        HappyCode: { baseUrl: 'https://local-sub2api.example', accessToken: 'stale-jwt', refreshToken: 'rt-current' },
+      },
+    });
+    const refused = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' }),
+    });
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(httpStatus(401))
+      .mockRejectedValue(refused));
+
+    const result = await fetchQuota('HappyCode');
+
+    expect(result).toMatchObject({ accountId: 'HappyCode', ok: false, configured: true, error: 'Could not reach the Sub2API panel' });
+    // The dead access token was never rotated, so the stored pair is untouched.
+    expect(readQuotaCredentialFile('sub2api').accounts.HappyCode.refreshToken).toBe('rt-current');
   });
 
   it('returns a redacted result for a supplied panel credential', async () => {
