@@ -1,0 +1,94 @@
+name: Patch Drift Check
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check patch branches
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Check patch drift
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branches=(
+            feat/background-transparency
+            chore/macos-remote-build
+            docs/lingxi-design-notes
+            feat/sub2api-quota-v2
+          )
+
+          summary="$RUNNER_TEMP/patch-drift-summary.md"
+          failed=0
+
+          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+
+          echo "## Patch drift check" > "$summary"
+
+          for branch in "${branches[@]}"; do
+            echo "::group::$branch"
+
+            if ! git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+              echo "::error title=Patch branch missing::$branch"
+              echo "- \`$branch\`: missing from origin" >> "$summary"
+              failed=1
+              echo "::endgroup::"
+              continue
+            fi
+
+            git switch -C patch-drift-check "origin/$branch"
+
+            if git rebase origin/main; then
+              echo "CLEAN: $branch"
+              echo "- \`$branch\`: clean" >> "$summary"
+            else
+              mapfile -d '' -t conflicts < <(git diff --name-only --diff-filter=U -z)
+
+              echo "::error title=Patch conflict::$branch"
+              echo "CONFLICT: $branch"
+              echo "Conflicting files:"
+              echo "- \`$branch\`: conflict" >> "$summary"
+
+              if [ "${#conflicts[@]}" -eq 0 ]; then
+                echo "  (no unmerged paths reported by Git)"
+                echo "  - No unmerged paths reported by Git" >> "$summary"
+              else
+                for file in "${conflicts[@]}"; do
+                  echo "  $file"
+                  echo "  - \`$file\`" >> "$summary"
+                done
+              fi
+
+              git rebase --abort
+              failed=1
+            fi
+
+            git switch --detach origin/main
+            git branch -D patch-drift-check
+            echo "::endgroup::"
+          done
+
+          cat "$summary"
+          cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
