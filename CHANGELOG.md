@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- **Chat context attachments:** everything you attach to a message — diff/file/plan comments, terminal selections, browser annotations, PR comments and failed checks, linked issues and PRs — now shows up in the conversation as a compact context card: a header naming the source, the captured content behind an expander, and your comment below it. Previously most of these arrived as a wall of raw text inside your message.
+- **Chat: comment on a reply.** Select text in a chat message and choose Comment to attach that quote with your note to the next message. The selection stays highlighted while you type, and the selection menu itself was restyled — Add to chat is now Add to input.
+- **Diff: comment like a review.** Hovering a line shows a + button in the gutter; clicking it, clicking a line, or dragging across lines opens the comment editor for that line or range. The comment editor and saved-comment cards now match the chat's comment style.
+- Files: in a rendered markdown preview, select text and choose Comment to attach exactly that fragment (with a source line range when it can be located) plus your note to the next message.
+- Composer: hovering or tapping a context chip above the input opens a stacked preview of everything attached, where a comment can be edited in place or an item removed before sending.
+- Mobile: the chat comment input overlays the composer exactly and rides the keyboard; Enter makes a new line there, with attach on the button.
+- Desktop: a freshly installed or updated build no longer keeps loading the previous version's interface from cache.
+- Chat: OpenCode notices now share one style.
+- UI: draft target menus stay inside the chat area instead of overlapping the header.
+- UI: Linear and Cloudflare tools now show their own icons.
+- UI: sidebar item tooltips no longer appear instantly on passing hover.
+- Sessions: headers now find archived sessions too, so an archived session's title no longer goes missing.
+- UI: the timeline dialog now fits small screens instead of squeezing the message list to a couple of rows (thanks to @gaojunran).
+- UI: the btw panel's shadow is lighter, matching the composer.
+
 ## [1.20.0] - 2026-08-23
 
 - **Session: /btw side questions.** Type `/btw` followed by your question to ask something off-topic in a temporary session forked from the current conversation, so it inherits the full context but leaves the chat itself untouched. The answer streams into a panel above the composer, which talks to that session while the panel is open; you can collapse it to a slim header bar, keep it as a full session, or discard it. The temporary session stays out of the sidebar and session lists until you keep it (thanks to @jaygupta17).

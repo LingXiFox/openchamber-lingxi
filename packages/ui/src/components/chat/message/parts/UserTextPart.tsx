@@ -15,6 +15,8 @@ import {
 } from '@/lib/messages/inlineMessageLinks';
 import { prepareUserMarkdownContent, SKILL_TOKEN_PATTERN } from './userTextPartContent';
 import { extractTerminalContexts } from '@/lib/messages/terminalContext';
+import { readContextPart } from '@/lib/messages/contextParts';
+import UserContextPart from './UserContextPart';
 
 type PartWithText = Part & { text?: string; content?: string; value?: string };
 
@@ -30,6 +32,10 @@ const normalizeUserMessageRenderingMode = (mode: unknown): 'markdown' | 'plain' 
 };
 
 const UserTextPart: React.FC<UserTextPartProps> = ({ part, messageId, agentMention }) => {
+    // Structured context (inline comments, terminal selections, annotations,
+    // PR context) renders as a dedicated block instead of raw prompt text.
+    const contextPayload = React.useMemo(() => readContextPart(part), [part]);
+
     const partWithText = part as PartWithText;
     const rawText = partWithText.text;
     const serializedText = typeof rawText === 'string' ? rawText : partWithText.content || partWithText.value || '';
@@ -223,6 +229,10 @@ const UserTextPart: React.FC<UserTextPartProps> = ({ part, messageId, agentMenti
             ];
         });
     }, [agentMention, openSkill, skillByName, textContent]);
+
+    if (contextPayload) {
+        return <UserContextPart payload={contextPayload} />;
+    }
 
     if ((!textContent || textContent.trim().length === 0) && terminalContextState.contexts.length === 0) {
         return null;
