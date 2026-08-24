@@ -1,6 +1,6 @@
-# Contributing to OpenChamber
+# 为 OpenChamber 做贡献
 
-## Getting Started
+## 开始使用
 
 ```bash
 git clone https://github.com/openchamber/openchamber.git
@@ -8,56 +8,56 @@ cd openchamber
 bun install
 ```
 
-## Dev Scripts
+## 开发脚本
 
-Run commands from the project root unless a section says otherwise.
+除非某一节另有说明，否则请从项目根目录运行命令。
 
 ### Web
 
-| Script | Description | Ports |
-|--------|-------------|-------|
-| `bun run dev` | Default web HMR dev flow. | auto-selected dev ports |
-| `bun run dev:web:full` | Build watcher + Express server. No HMR — manual refresh after changes. | `3001` (server + static) |
-| `bun run dev:web:hmr` | Vite dev server + Express API. **Open the Vite URL for HMR**, not the backend. | `5180` (Vite HMR), `3902` (API) |
-| `bun run start:web` | Start the packaged web server. | `3000` by default |
+| 脚本                     | 说明                                                         | 端口                           |
+| ---------------------- | ---------------------------------------------------------- | ---------------------------- |
+| `bun run dev`          | 默认的 Web HMR 开发流程。                                          | 自动选择开发端口                     |
+| `bun run dev:web:full` | 构建监听器 + Express 服务器。无 HMR——修改后需要手动刷新。                      | `3001`（服务器 + 静态资源）           |
+| `bun run dev:web:hmr`  | Vite 开发服务器 + Express API。**要使用 HMR，请打开 Vite URL，而不是后端地址。** | `5180`（Vite HMR）、`3902`（API） |
+| `bun run start:web`    | 启动打包后的 Web 服务器。                                            | 默认 `3000`                    |
 
-Both are configurable via env vars: `OPENCHAMBER_PORT`, `OPENCHAMBER_HMR_UI_PORT`, `OPENCHAMBER_HMR_API_PORT`.
+以上流程均可通过环境变量配置：`OPENCHAMBER_PORT`、`OPENCHAMBER_HMR_UI_PORT`、`OPENCHAMBER_HMR_API_PORT`。
 
-### Desktop (Electron)
-
-```bash
-bun run electron:dev          # HMR web UI + Electron shell
-bun run electron:dev:bundled  # Electron shell using built web assets
-bun run electron:build        # Package desktop app for the current platform
-```
-
-Desktop supports macOS, Windows, and Linux. The build output is written to `packages/electron/dist`.
-
-macOS builds create `dmg` and `zip` files. You need Xcode/build tools for notarized packaging and icon asset work.
-
-Windows builds create an NSIS installer. If signing env vars are not set, the build script makes an unsigned installer.
-
-Linux builds produce an AppImage for the native x64 or arm64 host.
-
-For desktop-specific details, see [`packages/electron/README.md`](./packages/electron/README.md).
-
-### VS Code Extension
+### 桌面端（Electron）
 
 ```bash
-bun run vscode:dev      # Watch mode + Extension Development Host
-bun run vscode:build    # Build extension + webview
-bun run vscode:package  # Create a local .vsix package
+bun run electron:dev          # HMR Web UI + Electron 外壳
+bun run electron:dev:bundled  # Electron 外壳，使用已构建的 Web 资源
+bun run electron:build        # 为当前平台打包桌面应用
 ```
 
-`bun run vscode:dev` opens an Extension Development Host automatically. You can override the editor or workspace with `OPENCHAMBER_VSCODE_BIN` and `OPENCHAMBER_VSCODE_DEV_WORKSPACE`.
+桌面端支持 macOS、Windows 和 Linux。构建产物会写入 `packages/electron/dist`。
 
-Example: `OPENCHAMBER_VSCODE_BIN=cursor bun run vscode:dev`.
+macOS 构建会创建 `dmg` 和 `zip` 文件。进行公证打包和图标资源处理需要 Xcode/构建工具。
 
-### Shared UI (`packages/ui`)
+Windows 构建会创建 NSIS 安装程序。如果未设置签名环境变量，构建脚本会生成未签名的安装程序。
 
-No standalone app server. This is a source-level library used by Web, Desktop, and VS Code.
+Linux 构建会针对原生 x64 或 arm64 主机生成 AppImage。
 
-Useful package commands:
+有关桌面端的具体细节，请参阅 [`packages/electron/README.md`](./packages/electron/README.md)。
+
+### VS Code 扩展
+
+```bash
+bun run vscode:dev      # 监听模式 + Extension Development Host
+bun run vscode:build    # 构建扩展 + Webview
+bun run vscode:package  # 创建本地 .vsix 包
+```
+
+`bun run vscode:dev` 会自动打开 Extension Development Host。你可以通过 `OPENCHAMBER_VSCODE_BIN` 和 `OPENCHAMBER_VSCODE_DEV_WORKSPACE` 覆盖编辑器或工作区。
+
+示例：`OPENCHAMBER_VSCODE_BIN=cursor bun run vscode:dev`。
+
+### 共享 UI（`packages/ui`）
+
+没有独立的应用服务器。这是由 Web、桌面端和 VS Code 共用的源码级库。
+
+常用的软件包命令：
 
 ```bash
 bun run build:ui
@@ -65,24 +65,24 @@ bun run type-check:ui
 bun run lint:ui
 ```
 
-## Build And Package Commands
+## 构建和打包命令
 
-| Command | What it does |
-|---------|--------------|
-| `bun run build` | Build all workspaces |
-| `bun run build:web` | Build only `packages/web` |
-| `bun run build:ui` | Build only `packages/ui` |
-| `bun run build:electron` | Run Electron package build script without full packaging |
-| `bun run electron:build` | Build packaged desktop app for the current OS |
-| `bun run vscode:build` | Build the VS Code extension |
-| `bun run vscode:package` | Package the VS Code extension as `.vsix` |
-| `bun run pack:web` | Create a package archive for `@openchamber/web` |
+| 命令                       | 作用                           |
+| ------------------------ | ---------------------------- |
+| `bun run build`          | 构建所有工作区                      |
+| `bun run build:web`      | 仅构建 `packages/web`           |
+| `bun run build:ui`       | 仅构建 `packages/ui`            |
+| `bun run build:electron` | 运行 Electron 包构建脚本，但不进行完整打包   |
+| `bun run electron:build` | 为当前操作系统构建打包后的桌面应用            |
+| `bun run vscode:build`   | 构建 VS Code 扩展                |
+| `bun run vscode:package` | 将 VS Code 扩展打包为 `.vsix`      |
+| `bun run pack:web`       | 为 `@openchamber/web` 创建软件包归档 |
 
-## Platform Build Notes
+## 平台构建说明
 
-You usually build desktop installers on the target platform.
+通常应当在目标平台上构建桌面端安装程序。
 
-macOS:
+macOS：
 
 ```bash
 bun run electron:build
@@ -90,185 +90,144 @@ bun run release:test:intel
 bun run release:test:arm
 ```
 
-Windows:
+Windows：
 
 ```bash
 bun run electron:build
 ```
 
-Linux x64 and arm64 AppImages are packaged natively on the matching host architecture. Use Bun for dependency installation and packaging orchestration:
+Linux x64 和 arm64 AppImage 会在对应架构的主机上进行原生打包。使用 Bun 安装依赖并协调打包流程：
 
 ```bash
 OPENCHAMBER_TARGET_ARCH=x64 bun run electron:build
-# On an arm64 host:
+# 在 arm64 主机上：
 OPENCHAMBER_TARGET_ARCH=arm64 bun run electron:build
 
 bun run --cwd packages/electron verify:linux-appimage
 ```
 
-The final AppImage verifier checks desktop identity and the architecture of Electron, the bundled OpenCode CLI, and packaged native modules.
+最终的 AppImage 验证器会检查桌面应用标识，以及 Electron、捆绑的 OpenCode CLI 和已打包原生模块的架构。
 
-## Before Submitting
+## 提交前
 
 ```bash
-bun run type-check   # Must pass
-bun run lint         # Must pass
-bun run test         # Must pass
-bun run build        # Must succeed
+bun run type-check   # 必须通过
+bun run lint         # 必须通过
+bun run test         # 必须通过
+bun run build        # 必须成功
 ```
 
-`bun run test` runs every suite in the repository: shared UI, VS Code, Electron,
-web/server, and the root scripts. The UI, VS Code, and Electron suites keep
-module-level singletons, so `scripts/run-isolated-tests.mjs` gives each test file
-its own process instead of letting load order decide the result. Run a single
-file directly while iterating (`bun test <file>`).
+`bun run test` 会运行仓库中的所有测试套件：共享 UI、VS Code、Electron、Web/服务器以及根目录脚本。UI、VS Code 和 Electron 测试套件会保留模块级单例，因此 `scripts/run-isolated-tests.mjs` 会让每个测试文件在各自独立的进程中运行，避免测试结果由模块加载顺序决定。迭代开发时，可以直接运行单个文件（`bun test <file>`）。
 
-For docs-only changes, validation may be enough:
+如果只是修改文档，进行以下验证可能就足够了：
 
 ```bash
 bun run docs:validate
 ```
 
-## Code Style
+## 代码风格
 
-- Functional React components only
-- TypeScript strict mode — no `any` without justification
-- Use existing theme colors/typography from `packages/ui/src/lib/theme/` — don't add new ones
-- Components must support light and dark themes
-- Prefer early returns and `if/else`/`switch` over nested ternaries
-- Tailwind v4 for styling; typography via `packages/ui/src/lib/typography.ts`
+* 仅使用函数式 React 组件
+* TypeScript 严格模式——除非有充分理由，否则不得使用 `any`
+* 使用 `packages/ui/src/lib/theme/` 中已有的主题颜色/字体样式——不要新增
+* 组件必须同时支持浅色和深色主题
+* 优先使用提前返回以及 `if/else`/`switch`，避免嵌套三元表达式
+* 使用 Tailwind v4 进行样式设计；排版通过 `packages/ui/src/lib/typography.ts` 处理
 
-## Pull Requests
+## Pull Request
 
-Pull requests are review handoffs, not just diffs. A reviewer must be able to
-understand the intended behavior, assess the risk, and verify the result
-without reconstructing the contributor's work.
+Pull Request 是一次面向审查者的工作交接，而不仅仅是一份 diff。审查者必须能够理解预期行为、评估风险并验证结果，而无需自行重新梳理贡献者完成的工作。
 
-Before opening a pull request:
+在创建 Pull Request 之前：
 
-1. Read [`AGENTS.md`](./AGENTS.md), every project skill matching the character
-   of the change, and the nearest package README and module `DOCUMENTATION.md`.
-2. Keep the change focused. Separate unrelated cleanup or refactors.
-3. Run the validation required by the applicable project guidance, not only
-   the broad commands above.
-4. Complete the pull request template with concrete, current evidence.
+1. 阅读 [`AGENTS.md`](./AGENTS.md)、所有与本次变更性质相匹配的项目 Skill，以及最近的软件包 README 和模块 `DOCUMENTATION.md`。
+2. 保持变更聚焦。将无关的清理或重构拆分出去。
+3. 执行适用项目指南要求的验证，而不仅仅是上面列出的通用命令。
+4. 使用具体且最新的证据完整填写 Pull Request 模板。
 
-### Pull Request Contract
+### Pull Request 契约
 
-Every pull request must explain:
+每个 Pull Request 都必须说明：
 
-- **Intent:** the user or maintainer problem being solved and the resulting
-  behavior.
-- **Non-goals:** nearby behavior intentionally left unchanged when the scope
-  could otherwise be ambiguous.
-- **Affected surfaces:** packages, runtimes, persisted/external contracts, and
-  user-visible states affected by the change.
-- **Repository guidance:** the skills and owning documentation that were
-  applicable, why they applied, and how the implementation satisfies their
-  important constraints.
-- **Validation:** exact automated and manual checks performed, their result,
-  and anything that was not verified. A command name without a result is not
-  evidence.
-- **Risk and failure behavior:** meaningful failure, rollback, cleanup,
-  compatibility, security, performance, or cross-runtime considerations.
+* **意图（Intent）：** 要解决的用户或维护者问题，以及最终产生的行为。
+* **非目标（Non-goals）：** 当范围可能存在歧义时，明确说明哪些邻近行为有意保持不变。
+* **受影响范围（Affected surfaces）：** 受本次变更影响的软件包、运行时、持久化/外部契约以及用户可见状态。
+* **仓库指南（Repository guidance）：** 哪些 Skill 和归属文档适用于此次变更、为什么适用，以及实现如何满足其中的重要约束。
+* **验证（Validation）：** 实际执行的自动和手动检查、准确结果，以及任何尚未验证的内容。仅提供命令名称而没有结果不能算作证据。
+* **风险和失败行为（Risk and failure behavior）：** 有意义的失败、回滚、清理、兼容性、安全性、性能或跨运行时注意事项。
 
-Do not claim a runtime, platform, relay path, performance characteristic, or
-interaction is correct based only on type-checking or linting. If required
-validation could not be performed, state that explicitly and explain why.
+不得仅凭类型检查或 lint 就声称某个运行时、平台、中继路径、性能特征或交互行为是正确的。如果无法执行必要验证，必须明确说明这一点并解释原因。
 
-### Visual Evidence
+### 可视化证据
 
-User-visible changes require evidence that lets a reviewer compare the
-behavior before and after the change. Attach screenshots for static states and
-a short recording for motion, gestures, drag-and-drop, focus, or multi-step
-interactions.
+用户可见的变更必须提供证据，使审查者能够比较变更前后的行为。静态状态请附截图；涉及动画、手势、拖放、焦点或多步骤交互时，请附一段简短录屏。
 
-Claims about performance, memory, CPU, rendering, startup, or similar empirical
-behavior require relevant before and after measurements.
+关于性能、内存、CPU、渲染、启动时间或类似实测行为的声明，必须提供相关的变更前后测量结果。
 
-Choose evidence based on the affected behavior:
+根据受影响的行为选择证据：
 
-- Include before and after states. If a meaningful before state cannot be
-  captured, explain why.
-- Include narrow/mobile and desktop states when shared or responsive UI is
-  affected.
-- Include light and dark states when colors, styling, surfaces, or visual
-  states change.
-- Include relevant loading, empty, error, disabled, long-content, or
-  high-contrast states when the change affects them.
-- For Settings changes, show the relevant narrow and wide settings pane states.
+* 包含变更前和变更后的状态。如果无法捕获有意义的变更前状态，请说明原因。
+* 当共享 UI 或响应式 UI 受到影响时，同时提供窄屏/移动端和桌面端状态。
+* 当颜色、样式、界面表面或视觉状态发生变化时，同时提供浅色和深色状态。
+* 当变更会影响加载、空状态、错误、禁用、长内容或高对比度状态时，提供相应状态。
+* 对于 Settings 变更，展示相关的窄屏和宽屏设置面板状态。
 
-Evidence must represent the current pull request HEAD. After implementation
-changes that can affect the demonstrated behavior, refresh the evidence or
-state why it remains valid. If there is genuinely no user-visible change, say
-so and provide a concrete reason; deleting the evidence section is not an
-exemption.
+证据必须对应当前 Pull Request 的 HEAD。实现发生可能影响所展示行为的变更后，应重新生成证据，或者说明现有证据为什么仍然有效。如果确实没有任何用户可见变更，请明确说明并提供具体理由；删除证据章节并不能构成豁免。
 
-### Review enforcement
+### 审查执行机制
 
-The automated reviewer performs one unified review of correctness, repository
-guidance compliance, pull request quality, and evidence. It independently
-determines which project skills apply from the character of the current diff,
-reads those skills and their required references, and checks the implementation
-against them.
+自动审查器会统一审查正确性、仓库指南合规性、Pull Request 质量和证据。它会根据当前 diff 的变更性质独立判断哪些项目 Skill 适用，读取这些 Skill 及其要求的参考资料，然后依据它们检查实现。
 
-The reviewer records the exact HEAD it inspected and returns one verdict:
+审查器会记录它实际检查的准确 HEAD，并返回以下一种结论：
 
-- `PASS`: no blocking correctness, compliance, or evidence issue was found.
-- `NEEDS_EVIDENCE`: no correctness, repository-guidance, or contribution-contract
-  blocker was found, but a required screenshot, interaction recording, or
-  empirical measurement is missing, stale, contradictory, or inadequate.
-- `BLOCKED`: a concrete correctness, security, repository-rule, or contribution
-  contract violation must be fixed.
-- `HUMAN_REVIEW_REQUIRED`: the change affects review policy or another boundary
-  that automation must not approve on its own.
+* `PASS`：未发现阻塞性的正确性、合规性或证据问题。
+* `NEEDS_EVIDENCE`：未发现正确性、仓库指南或贡献契约方面的阻塞问题，但所需的截图、交互录屏或实测数据缺失、过时、相互矛盾或不充分。
+* `BLOCKED`：存在具体的正确性、安全性、仓库规则或贡献契约违规，必须修复。
+* `HUMAN_REVIEW_REQUIRED`：变更影响了审查策略或其他自动化不得自行批准的边界，需要人工审查。
 
-The workflow exposes the current state as exactly one readiness label:
-`review:pending`, `review:ready`, `review:needs-evidence`, `review:blocked`,
-`review:human-required`, or `review:automation-failed`. A new review removes
-the previous readiness label before it starts, and only `review:ready` means
-the pull request is ready to enter the maintainer review queue. Draft pull
-requests have no readiness label.
+工作流会使用且仅使用一个 readiness 标签表示当前状态：
 
-AI review verdicts are advisory and never fail the pull request check. Readiness
-is communicated only through the `review:*` label and immutable review comment.
-The `automation` job fails only when the workflow itself cannot complete or
-verify a trustworthy result, in which case it applies `review:automation-failed`.
+`review:pending`、`review:ready`、`review:needs-evidence`、`review:blocked`、`review:human-required` 或 `review:automation-failed`。
 
-Each completed review creates a new comment tied to its reviewed HEAD so the
-conversation remains chronological. Previous review comments are not rewritten.
+开始新的审查时，会先移除之前的 readiness 标签；只有 `review:ready` 表示 Pull Request 已准备好进入维护者审查队列。Draft Pull Request 不具有 readiness 标签。
 
-### Keeping PRs active
+AI 审查结论仅作为建议，永远不会让 Pull Request 检查本身失败。就绪状态只通过 `review:*` 标签和不可变的审查评论传达。只有当工作流本身无法完成或无法验证出可信结果时，`automation` job 才会失败，此时会应用 `review:automation-failed`。
 
-Stale PRs add review load and make it hard to tell what's still being worked on, so the stale bot keeps the open list current. A PR with no activity for 28 days is automatically labeled `stale`, and closed 7 days later if it stays inactive. To keep a PR open:
+每次完成审查都会创建一条与被审查 HEAD 绑定的新评论，以保持讨论记录的时间顺序。之前的审查评论不会被改写。
 
-- Push updates or respond to review feedback
-- Leave a comment if you're waiting on a reviewer
-- Add the `pinned`, `security`, or `help wanted` label to exempt a long-running PR from the stale bot
+### 保持 PR 活跃
 
-Reopening a closed PR is fine if it becomes relevant again.
+过时的 PR 会增加审查负担，也让人难以判断哪些工作仍在继续，因此 stale bot 会保持开放 PR 列表处于最新状态。PR 连续 28 天没有活动时会自动添加 `stale` 标签；如果之后继续保持不活跃，则会在 7 天后关闭。要保持 PR 开放：
 
-## Project Structure
+* 推送更新或回复审查反馈
+* 如果正在等待审查者，请留一条评论
+* 添加 `pinned`、`security` 或 `help wanted` 标签，让长期运行的 PR 不受 stale bot 影响
 
-```
+如果已经关闭的 PR 后来重新变得相关，可以重新打开。
+
+## 项目结构
+
+```text
 packages/
-  ui/        Shared React components, hooks, stores, and theme system
-  web/       Web server (Express) + frontend (Vite) + CLI
-  electron/  Electron desktop shell
-  vscode/    VS Code extension (extension host + webview)
+  ui/
+  web/
+  electron/
+  vscode/
+  mobile/
+  docs/
 ```
 
-See [AGENTS.md](./AGENTS.md) for detailed architecture reference.
+各包职责边界见 [AGENTS.md](./AGENTS.md) 的「运行时边界」一节。
 
-## Not a developer?
+## 不是开发者？
 
-You can still help:
+你仍然可以提供帮助：
 
-- Report bugs or UX issues — even "this felt confusing" is valuable feedback
-- Test on different devices, browsers, or OS versions
-- Suggest features or improvements via issues
-- Help others in Discord
+* 报告 bug 或 UX 问题——即使只是“这里让我觉得很困惑”，也是有价值的反馈
+* 在不同设备、浏览器或操作系统版本上进行测试
+* 通过 issue 提出功能或改进建议
+* 在 Discord 中帮助其他人
 
-## Questions?
+## 有问题？
 
-Open an [issue](https://github.com/openchamber/openchamber/issues) or ask in [Discord](https://discord.gg/ZYRSdnwwKA).
+创建一个 [issue](https://github.com/openchamber/openchamber/issues)，或者在 [Discord](https://discord.gg/ZYRSdnwwKA) 中提问。 

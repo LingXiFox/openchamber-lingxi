@@ -1,34 +1,34 @@
-# Custom Themes
+# 自定义主题
 
-OpenChamber supports user-defined themes. Drop a JSON file into the themes directory and reload — no app restart required.
+OpenChamber 支持用户自定义主题。将一个 JSON 文件放入 themes 目录并重新加载 — 无需重启应用。
 
-## Quick Start
+## 快速开始
 
-1. Create the themes directory:
+1. 创建 themes 目录（完整路径见下文「主题位置」）:
    ```bash
    mkdir -p ~/.config/openchamber/themes
    ```
 
-2. Create a theme JSON file (e.g., `my-theme.json`) with the format below.
+2. 按照下面的格式创建一个主题 JSON 文件 (例如, `my-theme.json`)。
 
-3. In OpenChamber: **Settings → Theme → Reload themes**.
+3. 在 OpenChamber 中: **设置 → 主题 → 重新加载主题**。
 
-4. Select your theme from the dropdown.
+4. 从下拉菜单中选择你的主题。
 
-## Theme Location
+## 主题位置
 
-| Platform | Path |
+| 平台 | 路径 |
 |----------|------|
 | macOS/Linux | `~/.config/openchamber/themes/` |
 
-## Theme Format
+## 主题格式
 
 ```json
 {
   "metadata": {
     "id": "my-custom-theme",
-    "name": "My Custom Theme",
-    "description": "A custom theme for OpenChamber",
+    "name": "我的自定义主题",
+    "description": "一个用于 OpenChamber 的自定义主题",
     "version": "1.0.0",
     "variant": "dark",
     "tags": ["dark", "custom"]
@@ -45,9 +45,9 @@ OpenChamber supports user-defined themes. Drop a JSON file into the themes direc
     "surface": {
       "background": "#100F0F",
       "foreground": "#CECDC3",
-      "muted": "#1C1B1A90",
+      "muted": "#1C1B1A",
       "mutedForeground": "#878580",
-      "elevated": "#1C1A1990",
+      "elevated": "#1C1A19",
       "elevatedForeground": "#CECDC3",
       "overlay": "#00000080",
       "subtle": "#1e1d1c"
@@ -209,21 +209,21 @@ OpenChamber supports user-defined themes. Drop a JSON file into the themes direc
 }
 ```
 
-## Surface Alpha Requirement
+## Surface Alpha
 
-- `colors.surface.muted` and `colors.surface.elevated` must always use 90 alpha (`...90` in 8-digit hex, e.g. `#1C1B1A90`).
+- 加载校验不会检查 alpha 值。内置主题中 `colors.surface.muted` 和 `colors.surface.elevated` 使用不透明颜色；需要半透明效果时才添加 alpha (例如 `#1C1B1A90`)。
 
-## Validation
+## 验证
 
-Themes are validated on load. Invalid themes are skipped with a console warning.
+主题会在加载时进行验证。无效主题会被跳过并在控制台显示警告。
 
-Common issues:
-- Missing required fields
-- Invalid `variant` (must be `"light"` or `"dark"`)
-- File size > 512KB
+常见问题:
+- 缺少必填字段
+- 无效的 `variant` (必须是 `"light"` 或 `"dark"`)
+- 文件大小 > 512KB
 
-## Tips
+## 提示
 
-- Use hex with alpha for transparency (e.g., `#FFFFFF20`)
-- Reference built-in themes in `packages/ui/src/lib/theme/themes/` for more examples
-- Theme `id` must be unique; duplicates are skipped
+- 使用带 alpha 的十六进制值实现透明效果 (例如, `#FFFFFF20`)
+- 参考 `packages/ui/src/lib/theme/themes/` 中的内置主题以获取更多示例
+- 主题 `id` 必须唯一; 重复项会被跳过

@@ -1,141 +1,113 @@
-# OpenChamber Agent Guide
+# OpenChamber Agent 指南
 
-## Purpose
+## 目的
 
-OpenChamber provides shared web, desktop, VS Code, hosted-mobile, and native-mobile UI surfaces for OpenCode.
+OpenChamber 为 OpenCode 提供共享的 Web、桌面端、VS Code、托管移动端和原生移动端 UI 界面。
 
-This file contains only always-on repository rules and routing. Detailed workflows belong to project skills and module documentation.
+本文件仅包含始终生效的仓库规则和路由规则。详细工作流程归属于项目 Skills 和模块文档。
 
-## Instruction Order
+## 指令顺序
 
-These steps are mandatory. Before editing, you **MUST**:
+以下步骤为强制要求。在进行编辑之前，你**必须**：
 
-1. Follow this root guide.
-2. Load every matching project skill and every task-required reference from
-   those skills.
-3. Read the nearest `DOCUMENTATION.md` and package `README.md` when present.
-4. Follow local code and test precedent.
+1. 遵循此根级指南。
+2. 加载所有与任务匹配的项目 Skill，以及这些 Skill 中任务所要求的所有参考资料。
+3. 如果存在，则阅读距离最近的 `DOCUMENTATION.md` 和对应包的 `README.md`。
+4. 遵循本地已有的代码和测试惯例。
 
-If these sources materially conflict, stop and resolve the conflict instead of silently choosing one.
-Do not start editing when a matching skill or required reference has not been
-read. Skill loading is a required part of the task, not optional guidance.
+如果这些来源之间存在实质性冲突，应停止操作并解决冲突，而不是悄悄选择其中一个。
 
-## Runtime Boundaries
+如果匹配的 Skill 或所要求的参考资料尚未阅读，不得开始编辑。加载 Skill 是任务的必需环节，而不是可选建议。
 
-- `packages/ui`: shared React UI, state, sync, and runtime contracts.
-- `packages/web`: web surfaces, OpenChamber server, managed/external OpenCode lifecycle, and CLI.
-- `packages/electron`: native desktop shell and privileged Electron boundary.
-- `packages/vscode`: extension host, webview, and runtime bridge.
-- `packages/mobile`: Capacitor iOS/Android shell; bundles the mobile web surface and connects to an existing OpenChamber server.
-- `packages/docs`: product documentation; not a Bun workspace.
+## 运行时边界
 
-Shared UI calls official OpenCode APIs through `@opencode-ai/sdk/v2`. OpenChamber-owned capabilities use `RuntimeAPIs`, `runtimeFetch`, and shared browser/realtime transport helpers. Server-side upstream integrations may use their owning runtime modules.
+* `packages/ui`：共享 React UI、状态、同步和运行时契约。
+* `packages/web`：Web 界面、OpenChamber 服务器、托管/外部 OpenCode 生命周期，以及 CLI。
+* `packages/electron`：原生桌面外壳和具有特权的 Electron 边界。
+* `packages/vscode`：扩展宿主、Webview 和运行时桥接层。
+* `packages/mobile`：Capacitor iOS/Android 外壳；打包移动 Web 界面并连接到现有的 OpenChamber 服务器。
+* `packages/docs`：产品文档；不属于 Bun workspace。
 
-Electron starts the OpenChamber backend in-process, never as a sidecar. Development may load loopback/HMR UI; packaged builds load staged assets through `openchamber-ui://` while the loopback server remains the API backend. Keep domain backends in web/runtime modules unless behavior is inherently native.
+共享 UI 通过 `@opencode-ai/sdk/v2` 调用官方 OpenCode API。OpenChamber 自有能力使用 `RuntimeAPIs`、`runtimeFetch` 以及共享的浏览器/实时传输辅助工具。服务端的上游集成可以使用其所属的运行时模块。
 
-Shared contracts must define intentional behavior for every applicable runtime: web, desktop, VS Code, hosted mobile, and Capacitor mobile.
+Electron 会在进程内启动 OpenChamber 后端，绝不将其作为 sidecar 启动。开发环境可以加载回环地址/HMR UI；打包版本通过 `openchamber-ui://` 加载已暂存的资源，同时回环服务器仍作为 API 后端。除非某项行为天然属于原生端，否则应将领域后端逻辑保留在 Web/运行时模块中。
 
-## Always-On Constraints
+共享契约必须针对所有适用的运行时明确定义预期行为：Web、桌面端、VS Code、托管移动端和 Capacitor 移动端。
 
-- Do not modify `../opencode`; it is a separate repository.
-- Do not run git or GitHub commands unless the user explicitly asks.
-- Do not add dependencies unless explicitly requested.
-- Never add or log secrets, bearer tokens, pairing credentials, or sensitive user data.
-- Keep changes minimal and preserve unrelated worktree changes.
-- Enforce security and correctness in core/runtime logic, not only UI visibility or prompts.
-- Keep entrypoints and bridges thin; place domain logic in focused owning modules.
-- Update owning documentation when module ownership, contracts, or invariants change.
+## 始终生效的约束
 
-## Correctness Invariants
+* 不要修改 `../opencode`；它是一个独立仓库。
+* 除非用户明确要求，否则不要运行 git 或 GitHub 命令。
+* 除非明确要求，否则不要添加依赖。
+* 绝不要添加或记录密钥、Bearer Token、配对凭据或敏感用户数据。
+* 保持改动最小化，并保留工作树中与当前任务无关的修改。
+* 在核心/运行时逻辑中落实安全性和正确性，而不能只依赖 UI 可见性或提示信息。
+* 保持入口点和桥接层精简；将领域逻辑放在职责明确的归属模块中。
+* 当模块归属、契约或不变量发生变化时，更新对应的归属文档。
 
-- Prefer authoritative state over heuristics.
-- Derive live activity from live channels, not persisted history.
-- Scope temporary fallbacks narrowly and clear them when authoritative state arrives.
-- Never let fetch failure masquerade as authoritative empty success.
-- Make partial results, rollback, cleanup, and stale-data behavior explicit.
-- One failed entity must not erase or block unrelated complete entities.
-- Runtime-specific differences must be intentional and visible in code.
+## 正确性不变量
 
-## Documentation Discovery
+* 优先使用权威状态，而非启发式判断。
+* 从实时通道推导实时活动，而不是从持久化历史记录中推导。
+* 将临时回退方案严格限制在较小范围内，并在权威状态到达后将其清除。
+* 绝不要让获取失败伪装成权威的“空结果成功”。
+* 明确定义部分结果、回滚、清理和陈旧数据的行为。
+* 单个实体失败不得清除或阻塞其他无关且完整的实体。
+* 运行时特有的差异必须是有意设计的，并且应在代码中清晰可见。
 
-Before changing a module, search for the nearest `DOCUMENTATION.md`; before package-level work, read its `README.md`. Discover docs dynamically under `packages/**/DOCUMENTATION.md` rather than relying on a static exhaustive map.
+## 文档发现
 
-High-value anchors:
+修改某个模块前，搜索距离最近的 `DOCUMENTATION.md`；进行包级工作前，阅读其 `README.md`。应在 `packages/**/DOCUMENTATION.md` 下动态发现文档，而不是依赖静态且试图穷举全部内容的映射表。
 
-- Sync: `packages/ui/src/sync/DOCUMENTATION.md`
-- Stores: `packages/ui/src/stores/DOCUMENTATION.md`
-- CLI: `packages/web/bin/lib/DOCUMENTATION.md`
-- Performance measurement tooling: `scripts/perf/DOCUMENTATION.md`
-- VS Code runtime: `packages/vscode/src/DOCUMENTATION.md`
-- Electron: `packages/electron/README.md`
-- Mobile: `packages/mobile/README.md`
+高价值入口：
 
-## Project Skills
+* 同步：`packages/ui/src/sync/DOCUMENTATION.md`
+* Stores：`packages/ui/src/stores/DOCUMENTATION.md`
+* CLI：`packages/web/bin/lib/DOCUMENTATION.md`
+* 性能测量工具：`scripts/perf/DOCUMENTATION.md`
+* VS Code 运行时：`packages/vscode/src/DOCUMENTATION.md`
+* Electron：`packages/electron/README.md`
+* 移动端：`packages/mobile/README.md`
+* 本地打包 `.app` 隔离验收沙箱（启动映射、目录职责、清理与禁止边界）：仓库根目录的 `OpenChamberTest-README.md`；启动/验收打包应用、操作 `OpenChamberTest` 运行时目录，或涉及测试数据与正式用户数据的边界时先读它
 
-Project skills live under `.agents/skills/*/SKILL.md`. You **MUST** load every
-skill matching the character of the change before editing; multiple skills may
-apply, including companion skills required by another skill. Read every
-task-required reference named by those skills. Skills are canonical for their
-detailed workflows and checklists. Treating this table as optional advice is a
-process violation.
+## 项目 Skills
 
-**Always load `.agents/skills/communication-style/SKILL.md` at the start of
-every task, before any analysis, tool call, or response. Apply its guidance to
-all messages and written output, not only to user-facing copy or documentation.**
+项目 Skills 位于 `.agents/skills/*/SKILL.md` 下。在进行编辑之前，你**必须**加载所有与改动性质匹配的 Skill；可能同时适用多个 Skill，其中也包括其他 Skill 所要求的配套 Skill。必须阅读这些 Skill 中指定的所有任务所需参考资料。对于详细工作流程和检查清单，Skills 是规范性来源。将下表视为可选建议属于流程违规。
 
-| Trigger | Required skill |
-|---|---|
-| Source/dependency changes, exports or package contracts, build/generated assets, or module ownership | `openchamber-change-discipline` |
-| CLI commands, prompts, terminal output, non-TTY, `--quiet`, or `--json` behavior | `clack-cli-patterns` |
-| Shared UI data access, OpenCode SDK or server routes, `RuntimeAPIs`, runtime auth/URLs, bridges, or runtime switching | `ui-api-decoupling` |
-| Electron main/preload, IPC, native UI, updater, deep links, SSH/tunnels, packaging, or child processes | `desktop-shell` |
-| Session sync, bootstrap/reconnect, reducers, polling, optimistic state, queues, live status, reconciliation, or directory-scoped caches | `sync-state-invariants` |
-| Render/store/event hot paths, large lists, caches/indexes, or reported lag, freezes, CPU/memory, startup, or performance regressions | `performance-engineering` |
-| WebSocket, SSE, streaming transport, runtime transport internals, or private relay | `relay-transport` |
-| UI components, styling, colors, buttons, or icons | `theme-system` |
-| User-facing or accessible UI text, labels, aria, toasts, dialogs, or navigation copy | `locale-ui-patterns` |
-| Settings UI, settings dialogs, configuration surfaces, or settings search | `settings-ui-patterns` |
-| Sortable or drag-to-reorder behavior, especially `@dnd-kit` and touch/wrapping layouts | `drag-to-reorder` |
-| iOS Simulator build, launch, preview, gestures, or `serve-sim` control | `serve-sim` |
-| Drafting or updating user-facing CHANGELOG entries for the `[Unreleased]` section (main app or VS Code extension) | `changelog-authoring` |
-| Creating or editing skills, `AGENTS.md`, or docs reached through agent instructions/context pointers | `writing-for-agents` |
+**每个任务开始时，都必须首先加载 `.agents/skills/communication-style/SKILL.md`，并且要在任何分析、工具调用或响应之前完成。其指导规则应应用于所有消息和书面输出，而不仅限于面向用户的文案或文档。**
 
-Pure code-reading or explanation does not require implementation skills unless needed to interpret a specialized subsystem.
+| 触发条件                                                             | 必需 Skill                        |
+| ---------------------------------------------------------------- | ------------------------------- |
+| 源代码/依赖变更、导出或包契约、构建/生成资源，或模块归属                                    | `openchamber-change-discipline` |
+| CLI 命令、提示、终端输出、非 TTY、`--quiet` 或 `--json` 行为                     | `clack-cli-patterns`            |
+| 共享 UI 数据访问、OpenCode SDK 或服务器路由、`RuntimeAPIs`、运行时鉴权/URL、桥接层或运行时切换 | `ui-api-decoupling`             |
+| Electron main/preload、IPC、原生 UI、更新器、深度链接、SSH/隧道、打包或子进程           | `desktop-shell`                 |
+| Session 同步、初始化/重连、Reducer、轮询、乐观状态、队列、实时状态、协调，或目录作用域缓存            | `sync-state-invariants`         |
+| 渲染/Store/事件热路径、大型列表、缓存/索引，或已报告的延迟、卡死、CPU/内存、启动或性能回退问题            | `performance-engineering`       |
+| WebSocket、SSE、流式传输、运行时传输内部机制或私有中继                                | `relay-transport`               |
+| UI 组件、样式、颜色、按钮或图标                                                | `theme-system`                  |
+| 面向用户或无障碍 UI 文本、标签、aria、Toast、对话框或导航文案                            | `locale-ui-patterns`            |
+| 设置 UI、设置对话框、配置界面或设置搜索                                            | `settings-ui-patterns`          |
+| 可排序或拖拽重排行为，尤其是 `@dnd-kit` 以及触控/换行布局                              | `drag-to-reorder`               |
+| iOS Simulator 构建、启动、预览、手势或 `serve-sim` 控制                        | `serve-sim`                     |
+| 为 `[Unreleased]` 部分（主应用或 VS Code 扩展）起草或更新面向用户的 CHANGELOG 条目      | `changelog-authoring`           |
+| 创建或编辑 Skills、`AGENTS.md`，或通过 Agent 指令/上下文指针访问到的文档                | `writing-for-agents`            |
 
-### Skill Ownership
+表中每个 Skill 同时是其触发条件所列关注点的规范归属方：每条跨领域规则只有一个归属 Skill。在向某个 Skill 添加指导规则之前，先确定该规则的规范归属方；如果该规则由另一个 Skill 负责，则添加一个精确的配套引用，并且只写明本地领域的影响，不要复制规则。
 
-Keep each cross-cutting rule with one canonical owner; companion skills add only domain-specific consequences and a pointer to that owner.
+单纯阅读代码或进行解释不需要加载实现类 Skills，除非为了理解某个专门的子系统而确有必要。
 
-| Concern | Canonical skill |
-|---|---|
-| Change scope, abstraction discipline, and validation risk | `openchamber-change-discipline` |
-| State authority, reconciliation, optimistic state, and lifecycle correctness | `sync-state-invariants` |
-| Measurement, hot-path cost, caching performance, and optimization evidence | `performance-engineering` |
-| Shared UI API and runtime boundaries | `ui-api-decoupling` |
-| WebSocket/SSE and private relay mechanics | `relay-transport` |
-| Electron native ownership and privilege boundary | `desktop-shell` |
-| UI tokens, primitives, icons, and animation styling | `theme-system` |
-| Settings composition and search behavior | `settings-ui-patterns` |
-| User-facing text and localization | `locale-ui-patterns` |
-| Agent-facing document structure and context pointers | `writing-for-agents` |
+## 验证
 
-Before adding guidance to a skill, identify its canonical owner. If another skill owns the rule, add a precise companion pointer and only the local consequence; do not copy the rule.
+* 将 `package.json` 中的脚本作为命令的权威来源。
+* 对可执行源代码改动，优先运行针对性测试，以及包级作用域的类型检查/lint。
+* 对跨 workspace 契约、根级工具、依赖或共享生成资源，使用 workspace 全局检查。
+* 当添加/删除/重命名源文件，或者修改导出、类型、入口点或 import 形态时，运行 `bun run dead-code`；由于该检查不会阻塞流程，因此需要人工检查其报告。
+* 对你创建或大幅重写的 TypeScript/JavaScript 文件运行 `bunx oxlint <changed-paths>`。这会运行项目内置的 `anti-slop` 插件，该插件会拒绝缺乏充分依据的类型处理方式：无正当理由的类型断言、`unknown`/`object`/`Record<string, unknown>` 契约、临时拼凑的 `typeof` 类型收窄，以及模块 Mock。修复你自己编写的代码中发现的问题。其他位置预先存在的问题属于已知积压项：不要大规模修复它们，也绝不要为了让检查通过而禁用规则、降低严重级别，或通过包装/洗白类型来规避规则。
+* 不要假设 TypeScript/lint 能覆盖服务端 JS、CLI JS、Electron 辅助代码或原生行为；针对受影响的界面运行相应的针对性测试、语法检查、构建或运行时验证。
+* 对仅修改文档或孤立配置的情况，运行范围最窄且相关的验证。
+* 准确报告哪些内容已经验证、哪些没有验证。单纯的静态检查无法证明运行时、中继、性能或平台行为的正确性。
 
-## Validation
+## Pull Request 交接
 
-- Use `package.json` scripts as the command source of truth.
-- Prefer focused tests and package-scoped type-check/lint for executable source changes.
-- Use workspace-wide checks for cross-workspace contracts, root tooling, dependencies, or shared generated assets.
-- Run `bun run dead-code` when source files are added/deleted/renamed or exports, types, entrypoints, or import shape change; inspect its report because it is non-blocking.
-- Run `bunx oxlint <changed-paths>` on TypeScript/JavaScript files you created or substantially rewrote. This runs the vendored `anti-slop` plugin, which rejects low-evidence typing: unjustified type assertions, `unknown`/`object`/`Record<string, unknown>` contracts, ad hoc `typeof` narrowing, and module mocking. Fix findings in code you authored. Pre-existing findings elsewhere are a known backlog: do not mass-fix them, and never silence a rule, weaken severity, or launder types to make the check pass.
-- Do not assume TypeScript/lint covers server JS, CLI JS, Electron helpers, or native behavior; run focused tests, syntax checks, builds, or runtime validation for the touched surface.
-- For docs-only or isolated config changes, run the narrowest relevant validation.
-- Report exactly what was and was not validated. Static checks alone do not prove runtime, relay, performance, or platform correctness.
-
-## Pull Request Handoff
-
-Before creating or updating a pull request, read `CONTRIBUTING.md` and
-`.github/PULL_REQUEST_TEMPLATE.md`. Complete the template with concrete,
-current evidence for the final PR HEAD; do not make the reviewer reconstruct
-intent, affected surfaces, applicable guidance, validation, visual behavior,
-or failure and rollback considerations from the diff alone.
+在创建或更新 Pull Request 之前，阅读 `CONTRIBUTING.md` 和 `.github/PULL_REQUEST_TEMPLATE.md`。使用针对最终 PR HEAD 的具体、最新证据完整填写模板；不要迫使审查者仅依靠 diff 自行还原改动意图、受影响界面、适用指导规则、验证情况、视觉行为，以及失败和回滚方面的考虑。
