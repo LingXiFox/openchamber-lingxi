@@ -5,7 +5,6 @@ import {
   isDesktopLocalOriginActive,
 } from '@/lib/desktop';
 import { getRuntimeKey, subscribeRuntimeEndpointChanged } from '@/lib/runtime-switch';
-import { useDirectoryStore } from '@/stores/useDirectoryStore';
 
 export type DesktopBackgroundReadability = 'weak' | 'standard' | 'strong';
 export type DesktopBackgroundFit = 'cover' | 'contain';
@@ -38,8 +37,7 @@ export const canUseDesktopBackgroundAppearance = (): boolean =>
 
 const currentScope = () => {
   const runtimeKey = getRuntimeKey();
-  const directory = useDirectoryStore.getState().currentDirectory;
-  return { runtimeKey, directory, key: JSON.stringify([runtimeKey, directory.replace(/\\/g, '/').replace(/\/+$/, '')]) };
+  return { runtimeKey, key: JSON.stringify([runtimeKey]) };
 };
 
 const publish = (scopeKey: string, appearance: DesktopBackgroundAppearance) => {
@@ -53,10 +51,8 @@ const invokeBackground = async (
 ): Promise<DesktopBackgroundAppearance | null> => {
   if (!canUseDesktopBackgroundAppearance()) return null;
   const scope = currentScope();
-  if (!scope.directory.trim()) return null;
   const args = {
     runtimeKey: scope.runtimeKey,
-    directory: scope.directory,
     appearance: patch,
   };
   const appearance = await invokeDesktop<DesktopBackgroundAppearance>(command, args);
@@ -76,41 +72,43 @@ export const previewDesktopBackground = (patch: DesktopBackgroundPatch) => {
 };
 
 export const useDesktopBackgroundAppearance = (): DesktopBackgroundAppearance | null => {
-  const directory = useDirectoryStore((state) => state.currentDirectory);
   const [runtimeEpoch, setRuntimeEpoch] = React.useState(0);
   const [appearance, setAppearance] = React.useState<DesktopBackgroundAppearance | null>(null);
 
   React.useEffect(() => subscribeRuntimeEndpointChanged(() => setRuntimeEpoch((value) => value + 1)), []);
 
   React.useEffect(() => {
-    if (!canUseDesktopBackgroundAppearance() || !directory.trim()) {
+    if (!canUseDesktopBackgroundAppearance()) {
       setAppearance(null);
       return;
     }
     const scope = currentScope();
     let cancelled = false;
-    setAppearance(null);
     const listener: AppearanceListener = (scopeKey, next) => {
       if (scopeKey === scope.key) setAppearance(next);
     };
     listeners.add(listener);
     const cached = appearances.get(scope.key);
-    if (cached) setAppearance(cached);
+    setAppearance(cached ?? {
+      panelOpacity: 0.84,
+      readability: 'standard',
+      blur: false,
+      fit: 'cover',
+      position: 'center',
+      assetUrl: null,
+    });
     void invokeDesktop<DesktopBackgroundAppearance>('desktop_background_get', {
       runtimeKey: scope.runtimeKey,
-      directory: scope.directory,
     }).then((next) => {
       if (!cancelled && next) {
         publish(scope.key, next);
       }
-    }).catch(() => {
-      if (!cancelled) setAppearance(null);
-    });
+    }).catch(() => {});
     return () => {
       cancelled = true;
       listeners.delete(listener);
     };
-  }, [directory, runtimeEpoch]);
+  }, [runtimeEpoch]);
 
   return appearance;
 };

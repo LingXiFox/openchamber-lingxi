@@ -9,7 +9,7 @@ import {
   writeBackgroundAppearance,
 } from './background-appearance.mjs';
 
-test('keeps background appearance isolated by runtime and directory', () => {
+test('keeps background appearance isolated by runtime without requiring a directory', () => {
   const root = {};
   writeBackgroundAppearance(root, { runtimeKey: 'local', directory: 'C:\\repo\\one\\' }, {
     panelOpacity: 0.5,
@@ -23,11 +23,33 @@ test('keeps background appearance isolated by runtime and directory', () => {
     readability: 'strong',
     blur: true,
   });
+  assert.deepEqual(readBackgroundAppearance(root, { runtimeKey: 'local', directory: '' }), {
+    ...DEFAULT_BACKGROUND_APPEARANCE,
+    panelOpacity: 0.7,
+    readability: 'strong',
+    blur: true,
+  });
   assert.deepEqual(
     readBackgroundAppearance(root, { runtimeKey: 'url:https://example.com', directory: 'C:/repo/one' }),
     DEFAULT_BACKGROUND_APPEARANCE,
   );
-  assert.throws(() => normalizeBackgroundScope({ runtimeKey: 'local', directory: '' }));
+  assert.throws(() => normalizeBackgroundScope({ runtimeKey: '', directory: '' }));
+});
+
+test('reads and replaces legacy per-directory entries for the same runtime', () => {
+  const root = {
+    desktopBackgroundAppearances: [
+      { workspaceKey: JSON.stringify(['local', '/repo/one']), panelOpacity: 0.9 },
+      { workspaceKey: JSON.stringify(['remote', '/repo/two']), panelOpacity: 0.75 },
+    ],
+  };
+
+  assert.equal(readBackgroundAppearance(root, { runtimeKey: 'local' }).panelOpacity, 0.9);
+  writeBackgroundAppearance(root, { runtimeKey: 'local' }, { panelOpacity: 0.8 });
+  assert.deepEqual(root.desktopBackgroundAppearances.map((entry) => entry.workspaceKey), [
+    JSON.stringify(['remote', '/repo/two']),
+    JSON.stringify(['local']),
+  ]);
 });
 
 test('detects only supported image bytes', () => {
