@@ -10,13 +10,10 @@ export const DEFAULT_BACKGROUND_APPEARANCE = Object.freeze({
 
 export const normalizeBackgroundScope = (raw = {}) => {
   const runtimeKey = typeof raw.runtimeKey === 'string' ? raw.runtimeKey.trim() : '';
-  const directory = typeof raw.directory === 'string'
-    ? raw.directory.trim().replace(/\\/g, '/').replace(/\/+$/, '')
-    : '';
-  if (!runtimeKey || !directory || runtimeKey.length > 2048 || directory.length > 4096) {
-    throw new Error('A runtime and workspace directory are required');
+  if (!runtimeKey || runtimeKey.length > 2048) {
+    throw new Error('A runtime is required');
   }
-  return { runtimeKey, directory, key: JSON.stringify([runtimeKey, directory]) };
+  return { runtimeKey, key: JSON.stringify([runtimeKey]) };
 };
 
 export const isBackgroundAssetId = (value) =>
@@ -72,13 +69,29 @@ const readEntries = (root) => Array.isArray(root?.[BACKGROUND_APPEARANCE_KEY])
 
 export const readBackgroundAppearance = (root, rawScope) => {
   const scope = normalizeBackgroundScope(rawScope);
-  const entry = readEntries(root).find((candidate) => candidate?.workspaceKey === scope.key);
+  const entries = readEntries(root);
+  const entry = entries.find((candidate) => candidate?.workspaceKey === scope.key)
+    ?? entries.findLast((candidate) => {
+      try {
+        const key = JSON.parse(candidate?.workspaceKey);
+        return Array.isArray(key) && key[0] === scope.runtimeKey;
+      } catch {
+        return false;
+      }
+    });
   return sanitizeBackgroundAppearance(entry);
 };
 
 export const writeBackgroundAppearance = (root, rawScope, rawAppearance) => {
   const scope = normalizeBackgroundScope(rawScope);
-  const entries = readEntries(root).filter((candidate) => candidate?.workspaceKey !== scope.key);
+  const entries = readEntries(root).filter((candidate) => {
+    try {
+      const key = JSON.parse(candidate?.workspaceKey);
+      return !Array.isArray(key) || key[0] !== scope.runtimeKey;
+    } catch {
+      return true;
+    }
+  });
   root[BACKGROUND_APPEARANCE_KEY] = [
     ...entries,
     { workspaceKey: scope.key, ...sanitizeBackgroundAppearance(rawAppearance) },
