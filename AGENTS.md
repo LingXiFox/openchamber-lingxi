@@ -239,7 +239,7 @@ bun run --cwd packages/electron package -- \
 Expected output application:
 
 ```text
-/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber LingXiFox.app
+/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber-Ling_Xi_Fox-Test.app
 ```
 
 This is the preferred local packaged build for development validation.
@@ -291,7 +291,7 @@ env \
   XDG_CACHE_HOME="/Volumes/Development/Runtime/OpenChamberTest/home/.cache" \
   OPENCHAMBER_DATA_DIR="/Volumes/Development/Runtime/OpenChamberTest/data" \
   OPENCHAMBER_OPENCODE_CWD="/Volumes/Development/Projects/projects/openchamber-lingxi" \
-  "/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber LingXiFox.app/Contents/MacOS/OpenChamber LingXiFox" \
+  "/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber-Ling_Xi_Fox-Test.app/Contents/MacOS/OpenChamber-Ling_Xi_Fox-Test" \
   --user-data-dir="/Volumes/Development/Runtime/OpenChamberTest/electron-user-data"
 ```
 
@@ -349,7 +349,7 @@ ERR_UNEXPECTED
 even though the correctly packaged resources exist under:
 
 ```text
-OpenChamber LingXiFox.app/Contents/Resources/
+OpenChamber-Ling_Xi_Fox-Test.app/Contents/Resources/
 ```
 
 Therefore:
@@ -380,18 +380,24 @@ Diagnose the actual packaging, resource, runtime, or configuration failure inste
 
 ### 6. Concurrent-instance rule
 
-Do not run the normal installed application and a development/test instance against the same application data at the same time.
+Do not run a normal-user-environment instance and a development/test instance against the same application data at the same time.
 
-The normal installed application is:
+Normal-user-environment instances include:
 
 ```text
 /Applications/OpenChamber.app
 ```
 
-The local packaged build is:
+and the daily-use build of this repository:
 
 ```text
-/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber LingXiFox.app
+/Applications/OpenChamber-Ling_Xi_Fox.app
+```
+
+Development/test instances launch only through the isolated OpenChamberTest environment (see below) and use the test build:
+
+```text
+/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber-Ling_Xi_Fox-Test.app
 ```
 
 Their filenames may differ, but they belong to the same OpenChamber application/data ecosystem.
@@ -399,6 +405,18 @@ Their filenames may differ, but they belong to the same OpenChamber application/
 When using the normal user environment, make sure the previous OpenChamber instance has fully exited before launching another build.
 
 This avoids concurrent access to OpenCode/OpenChamber databases and related state.
+
+### Instance identity
+
+Three builds may coexist and are distinct products at runtime. Never assume which one owns a port or process without checking:
+
+| Build | Role | Data environment |
+|---|---|---|
+| `/Applications/OpenChamber.app` | Official release; lacks this fork's features (e.g. Sub2API quota provider) | Normal user env (`~/.config/openchamber`, `~/.config/opencode`) |
+| `/Applications/OpenChamber-Ling_Xi_Fox.app` | This fork's installed daily-use production build | Normal user env — treat its ports, processes, and data as production |
+| `dist/mac-arm64/OpenChamber-Ling_Xi_Fox-Test.app` (this repository) | Development validation only | Isolated `/Volumes/Development/Runtime/OpenChamberTest` |
+
+Before probing any loopback port or API of a running instance, identify which build owns it: inspect the process command line (`pgrep -fl`, `lsof`) for the binary path and for isolation markers (`--user-data-dir`, `--openchamber-home`). Markers pointing into `/Volumes/Development/Runtime/OpenChamberTest` identify the test instance; anything bound to the normal user environment is production data. A response from an older or official build, such as `Unsupported provider` from a quota endpoint, says nothing about this repository's current implementation state.
 
 ### 7. Validation order
 
