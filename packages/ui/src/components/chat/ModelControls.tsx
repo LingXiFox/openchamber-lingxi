@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { MobileOverlayPanel } from '@/components/ui/MobileOverlayPanel';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
+import { StateSwap } from '@/components/ui/StateSwap';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icon } from "@/components/icon/Icon";
 import type { IconName } from "@/components/icon/icons";
@@ -2313,20 +2314,18 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                             </span>
                                         </>
                                     ) : currentProviderId ? (
-                                        <>
+                                        <StateSwap swapKey={currentProviderId} className="flex-shrink-0">
                                             <ProviderLogo
                                                 providerId={currentProviderId}
                                                 className={cn(controlIconSize, 'flex-shrink-0')}
                                             />
-                                            <Icon name="pencil-ai" className={cn(controlIconSize, 'text-primary/60 hidden')} />
-                                        </>
+                                        </StateSwap>
                                     ) : (
                                         <Icon name="pencil-ai" className={cn(controlIconSize, 'text-muted-foreground')} />
                                     )}
                                     {isReady && (
                                         <span
                                             ref={modelLabelRef}
-                                            key={`${currentProviderId}-${currentModelId}`}
                                             className={cn(
                                                 'model-controls__model-label overflow-hidden',
                                                 controlTextSize,
@@ -2334,9 +2333,11 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                                 'max-w-[260px]'
                                             )}
                                         >
-                                            <span className={cn('marquee-text', isModelLabelTruncated && 'marquee-text--active')}>
-                                                {currentModelDisplayName}
-                                            </span>
+                                            <StateSwap swapKey={`${currentProviderId}-${currentModelId}`}>
+                                                <span className={cn('marquee-text', isModelLabelTruncated && 'marquee-text--active')}>
+                                                    {currentModelDisplayName}
+                                                </span>
+                                            </StateSwap>
                                         </span>
                                     )}
                                 </div>
@@ -2434,11 +2435,13 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                             </>
                         ) : (
                             <>
-                                {currentProviderId ? (
-                                    <ProviderLogo
-                                        providerId={currentProviderId}
-                                        className={cn(controlIconSize, 'flex-shrink-0')}
-                                    />
+                                    {currentProviderId ? (
+                                    <StateSwap swapKey={currentProviderId} className="flex-shrink-0">
+                                        <ProviderLogo
+                                            providerId={currentProviderId}
+                                            className={cn(controlIconSize, 'flex-shrink-0')}
+                                        />
+                                    </StateSwap>
                                 ) : (
                                     <Icon name="pencil-ai" className={cn(controlIconSize, 'text-muted-foreground')} />
                                 )}
@@ -2449,9 +2452,11 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                         isMobile ? 'max-w-[120px]' : 'max-w-[220px]',
                                     )}
                                 >
-                                    <span className={cn('marquee-text', isModelLabelTruncated && 'marquee-text--active')}>
-                                        {currentModelDisplayName}
-                                    </span>
+                                    <StateSwap swapKey={`${currentProviderId}-${currentModelId}`}>
+                                        <span className={cn('marquee-text', isModelLabelTruncated && 'marquee-text--active')}>
+                                            {currentModelDisplayName}
+                                        </span>
+                                    </StateSwap>
                                 </span>
                             </>
                         )}
@@ -2609,11 +2614,11 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                         'cursor-pointer hover:bg-transparent hover:opacity-70',
                     )}
                 >
-                    <Icon name="brain-ai-3" className={cn(controlIconSize, 'flex-shrink-0', colorClass)} />
+                    <Icon name="brain-ai-3" className={cn(controlIconSize, 'flex-shrink-0 transition-colors', colorClass)} />
                     <span className={cn(
                         'model-controls__variant-label',
                         controlTextSize,
-                        'font-medium truncate min-w-0',
+                        'font-medium truncate min-w-0 transition-colors',
                         isMobile && 'max-w-[60px]',
                         colorClass
                     )}>
@@ -2634,12 +2639,12 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                     buttonHeight,
                                 )}
                             >
-                                <Icon name="brain-ai-3" className={cn(controlIconSize, 'flex-shrink-0', colorClass)} />
+                                <Icon name="brain-ai-3" className={cn(controlIconSize, 'flex-shrink-0 transition-colors', colorClass)} />
                                 <span
                                     className={cn(
                                         'model-controls__variant-label',
                                         controlTextSize,
-                                        'font-medium min-w-0 truncate',
+                                        'font-medium min-w-0 truncate transition-colors',
                                         isDesktop ? 'max-w-[180px]' : undefined,
                                         colorClass,
                                     )}
@@ -2732,7 +2737,9 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                                                     )}
                                                     style={uiAgentName ? { color: `var(${getAgentColor(uiAgentName).var})` } : undefined}
                                                 >
-                                                    {getAgentDisplayName()}
+                                                    <StateSwap swapKey={uiAgentName ?? ''}>
+                                                        {getAgentDisplayName()}
+                                                    </StateSwap>
                                                 </span>
                                             </>
                                         )}
@@ -2854,7 +2861,9 @@ export const ModelControls: React.FC<ModelControlsProps> = ({
                             )}
                             style={uiAgentName ? { color: `var(${getAgentColor(uiAgentName).var})` } : undefined}
                         >
-                            {getAgentDisplayName()}
+                            <StateSwap swapKey={uiAgentName ?? ''}>
+                                {getAgentDisplayName()}
+                            </StateSwap>
                         </span>
                     </>
                 )}

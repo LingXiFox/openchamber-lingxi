@@ -233,7 +233,20 @@ interface ChatInputProps {
     scrollToLatest?: () => void;
     active?: boolean;
     draftPresentationExiting?: boolean;
+    draftPresentationReveal?: boolean;
 }
+
+const DraftTitle: React.FC<{ children: React.ReactNode; reveal: boolean }> = ({ children, reveal }) => {
+    const [shouldReveal] = React.useState(reveal);
+    return (
+        <h1 className={cn(
+            'text-balance text-2xl font-normal tracking-tight text-foreground md:text-3xl',
+            shouldReveal && 'oc-motion-reveal',
+        )}>
+            {children}
+        </h1>
+    );
+};
 
 const resolveChatDraftIdentity = (sessionId: string | null): ChatDraftIdentity | null => {
     const sessionState = useSessionUIStore.getState();
@@ -252,6 +265,7 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
     scrollToLatest,
     active = true,
     draftPresentationExiting = false,
+    draftPresentationReveal = false,
 }) => {
     const { t } = useI18n();
     // Track if we restored a draft on mount (for text selection)
@@ -2601,14 +2615,14 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
         >
             {showDesktopDraftPresentation ? (
                 <div className={cn('chat-input-column mb-7 text-center', draftPresentationClassName)}>
-                    <h1 className="text-balance text-2xl font-normal tracking-tight text-foreground md:text-3xl">
+                    <DraftTitle key={newSessionDraft.draftId} reveal={draftPresentationReveal}>
                         {renderDraftTitle(
                             draftProjectLabel
                                 ? t('chat.emptyState.draftTitleWithProject', { project: draftProjectLabel })
                                 : t('chat.emptyState.draftTitle'),
                             draftProjectLabel,
                         )}
-                    </h1>
+                    </DraftTitle>
                 </div>
             ) : null}
             <div className={cn('chat-input-column relative overflow-visible', isComposerExpanded && 'flex flex-1 min-h-0 flex-col')}>
@@ -2944,8 +2958,10 @@ const ChatInputComponent: React.FC<ChatInputProps> = ({
             </div>
             {showDesktopDraftPresentation ? (
                 <DraftPresetChips
+                    key={newSessionDraft.draftId}
                     onSubmit={(starter) => submitPresetPrompt(starter.submitText, starter.ref.type)}
                     className={cn('chat-input-column mt-4', draftPresentationClassName)}
+                    reveal={draftPresentationReveal}
                 />
             ) : null}
             {currentSessionId ? <BtwPanel parentSessionId={currentSessionId} panel={btwPanel} /> : null}

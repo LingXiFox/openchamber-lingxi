@@ -136,6 +136,10 @@ Use an explicit override when testing a different OpenCode CLI build or when a u
 
 ## Common Env Vars
 
+Use `bun run web:sandbox` for Web/UI QA through OpenChamber's built-in browser capability. Use `bun run electron:sandbox` only for Electron-specific behavior. Both commands keep Electron storage, OpenChamber settings, managed OpenCode state, provider configuration, caches, logs, temporary files, and the managed workspace under `.dev-sandbox/`. The launcher also strips inherited OpenChamber/OpenCode endpoints and credential environment variables, skips login-shell environment loading and OS deep-link registration, and chooses free HMR/API ports without stopping an existing listener. Startup logs print the resolved storage paths, ports, and isolation status.
+
+`bun run electron:sandbox:clean` refuses to run while the Sandbox launcher is alive. It moves the previous state into ignored `.dev-sandbox-backups/` rather than deleting it.
+
 | Variable | Use |
 |----------|-----|
 | `OPENCHAMBER_ELECTRON_DEV=1` | Marks the runtime as desktop development mode |

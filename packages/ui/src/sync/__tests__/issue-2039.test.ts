@@ -365,6 +365,7 @@ describe("issue 2039 draft auto-accept", () => {
       newSessionDraft: {
         draftId: 0,
         open: false,
+        presentationRevealPending: false,
         directoryOverride: null,
         parentID: null,
         target: "chat",

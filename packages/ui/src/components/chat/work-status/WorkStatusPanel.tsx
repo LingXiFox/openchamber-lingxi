@@ -46,8 +46,10 @@ type Props = {
  * width changes in a row, which reads as a flutter. Collapsing on the same
  * curve and duration makes the chat's width move once, in one direction.
  */
+// JS-side twin of --motion-duration-panel (CSS vars cannot drive setTimeout).
+// Keep the two in sync: this timer gates when hidden content unmounts so the
+// collapse transition always has something to animate.
 const PANEL_TRANSITION_MS = 200;
-const PANEL_TRANSITION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 /**
  * Work-status panel: a card inside the chat column reporting the state of the
@@ -222,8 +224,8 @@ export const WorkStatusPanel: React.FC<Props> = ({ sessionId, directory, visible
             : `translateX(${WORK_STATUS_PANEL_WIDTH / 4}px)`,
         transformOrigin: 'top right',
         transitionProperty: 'width, opacity, transform, margin',
-        transitionDuration: `${PANEL_TRANSITION_MS}ms`,
-        transitionTimingFunction: PANEL_TRANSITION_EASING,
+        transitionDuration: 'var(--motion-duration-panel)',
+        transitionTimingFunction: 'var(--motion-ease-emphasized)',
         pointerEvents: interactive ? undefined : 'none',
       }}
     >

@@ -28,6 +28,7 @@ import { useUIStore, type ContextPanelMode, type PendingDiffScope } from '@/stor
 import { markSessionViewed } from '@/sync/notification-store';
 import { setExternallyViewedSession, useDirectoryStore } from '@/sync/sync-context';
 import { ContextPanelContent } from './ContextSidebarTab';
+import { ContextSurfaceFallback } from './ContextSurfaceFallback';
 import { BrowserPane } from '@/components/browser/BrowserPane';
 import { browserUrlLabel } from '@/lib/browser/url';
 import { registerBrowserOpener } from '@/lib/browser/controlClient';
@@ -341,8 +342,8 @@ const EditorTreeColumn: React.FC<{ visible: boolean }> = ({ visible }) => {
         ['--oc-editor-tree-width' as string]: `${isResizing ? (liveWidthRef.current ?? width) : width}px`,
         overflowX: 'clip',
         transitionProperty: isResizing ? 'none' : 'width',
-        transitionDuration: '200ms',
-        transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        transitionDuration: 'var(--motion-duration-panel)',
+        transitionTimingFunction: 'var(--motion-ease-emphasized)',
       }}
       aria-hidden={!visible}
     >
@@ -363,7 +364,7 @@ const EditorTreeColumn: React.FC<{ visible: boolean }> = ({ visible }) => {
       )}
       <div
         className={cn(
-          'relative z-10 h-full shrink-0 transition-opacity duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+          'relative z-10 h-full shrink-0 transition-opacity duration-[var(--motion-duration-panel)] ease-[var(--motion-ease-emphasized)] motion-reduce:transition-none',
           isResizing && 'pointer-events-none',
           !visible && 'pointer-events-none select-none opacity-0'
         )}
@@ -937,13 +938,13 @@ export const ContextPanel: React.FC = () => {
   const activeNonChatContent = activeTab?.mode === 'context'
         ? <ContextPanelContent />
         : activeTab?.mode === 'git'
-            ? <React.Suspense fallback={null}><GitView isActive={isOpen} /></React.Suspense>
+            ? <React.Suspense fallback={<ContextSurfaceFallback />}><GitView isActive={isOpen} /></React.Suspense>
             : activeTab?.mode === 'pr'
                 ? <PullRequestView />
             : activeTab?.mode === 'notes'
                 ? <ProjectContextPanel />
         : activeTab?.mode === 'plan'
-            ? <React.Suspense fallback={null}><PlanView targetPath={activeTab.targetPath} projectPlanId={activeTab.projectPlanId} /></React.Suspense>
+            ? <React.Suspense fallback={<ContextSurfaceFallback />}><PlanView targetPath={activeTab.targetPath} projectPlanId={activeTab.projectPlanId} /></React.Suspense>
             : null;
 
   const browserTabs = React.useMemo(
@@ -1107,7 +1108,7 @@ export const ContextPanel: React.FC = () => {
           : 'relative h-full flex-shrink-0',
         !isOpen && 'pointer-events-none',
         'will-change-[width] motion-reduce:transition-none',
-        'transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]'
+        'transition-[width] duration-[var(--motion-duration-panel)] ease-[var(--motion-ease-emphasized)]'
       )}
       onKeyDownCapture={handlePanelKeyDownCapture}
       style={panelStyle}
@@ -1136,7 +1137,7 @@ export const ContextPanel: React.FC = () => {
       )}
       <div
         className={cn(
-          'relative z-10 flex h-full min-h-0 shrink-0 flex-col duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+          'relative z-10 flex h-full min-h-0 shrink-0 flex-col duration-[var(--motion-duration-panel)] ease-[var(--motion-ease-emphasized)] motion-reduce:transition-none',
           // Width animates in sync with the panel (surface switches, resize
           // release); during the drag itself nothing resizes — only the ghost
           // guide line moves.
@@ -1158,7 +1159,7 @@ export const ContextPanel: React.FC = () => {
           <div className={cn('absolute inset-0 flex', isFileTabActive ? 'flex' : 'hidden')}>
             <div className="h-full min-w-0 flex-1">
               {hasOpenEditorFile ? (
-                <React.Suspense fallback={null}><FilesView mode="editor-only" /></React.Suspense>
+                <React.Suspense fallback={<ContextSurfaceFallback />}><FilesView mode="editor-only" /></React.Suspense>
               ) : (
                 <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
                   <Icon name="file-code" className="h-12 w-12 text-muted-foreground/50" />
@@ -1209,7 +1210,7 @@ export const ContextPanel: React.FC = () => {
               activeTab?.id !== tab.id && 'hidden'
             )}
           >
-            <React.Suspense fallback={null}>
+            <React.Suspense fallback={<ContextSurfaceFallback />}>
               <DiffView
                 hideStackedFileSidebar
                 stackedDefaultCollapsedAll
@@ -1230,7 +1231,7 @@ export const ContextPanel: React.FC = () => {
         ) : null}
         {hasWalkthroughTab ? (
           <div className={cn('absolute inset-0', activeTab?.mode === 'walkthrough' ? 'block' : 'hidden')}>
-            <React.Suspense fallback={null}>
+            <React.Suspense fallback={<ContextSurfaceFallback />}>
               <WalkthroughView directory={effectiveDirectory} />
             </React.Suspense>
           </div>

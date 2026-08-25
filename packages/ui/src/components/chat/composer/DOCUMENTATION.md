@@ -17,6 +17,19 @@ animation. Do not restore separate draft and session composer branches:
 remounting the editor loses focus and interrupts the transition. Keep the
 existing mobile fixed-position rules unchanged.
 
+An explicit new-draft action also queues one welcome and starter-group reveal.
+`ChatContainer.tsx` consumes that flag after the first visible presentation;
+automatic drafts, target updates, registry refreshes, and responsive remounts
+do not replay it. The reveal uses only opacity and transform, and reduced-motion
+mode resolves it immediately.
+
+The send/queue/stop control keeps one primary button element mounted across
+idle↔busy: only its two stacked glyphs crossfade (`oc-motion-state-icon`, fast
+token), so the hit target and form semantics never move. Readiness stays a
+direct disabled state with no entrance motion; `StateSwap`
+(`components/ui/StateSwap.tsx`) provides the same fixed-slot crossfade for
+model/agent labels in `ModelControls`.
+
 ## Layers
 
 | Directory | Owns |

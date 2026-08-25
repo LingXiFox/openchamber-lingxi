@@ -255,11 +255,11 @@ const SessionFolderItemBase = <TSessionNode,>({
                   unreadLabel={t('sessions.sidebar.session.status.unread')}
                 />
               ) : null}
-              {isCollapsed ? (
-                <Icon name="arrow-right-s" className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-              ) : (
-                <Icon name="arrow-down-s" className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
-              )}
+              <Icon
+                name="arrow-right-s"
+                aria-hidden="true"
+                className={cn('h-3.5 w-3.5 flex-shrink-0 text-muted-foreground oc-motion-indicator', !isCollapsed && 'rotate-90')}
+              />
             </div>
           )}
 

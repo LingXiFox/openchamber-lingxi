@@ -526,8 +526,9 @@ const renderDraftTitle = (title: string, projectLabel: string | null): React.Rea
     );
 };
 
-const DraftWelcome: React.FC<{ exiting?: boolean }> = ({ exiting = false }) => {
+const DraftWelcome: React.FC<{ exiting?: boolean; reveal?: boolean }> = ({ exiting = false, reveal = false }) => {
     const { t } = useI18n();
+    const [shouldReveal] = React.useState(reveal);
     const draftTarget = useSessionUIStore((state) => state.newSessionDraft.target);
     const selectedProjectId = useSessionUIStore((state) => state.newSessionDraft.selectedProjectId ?? null);
     const projectLabel = useProjectsStore(React.useCallback((state) => {
@@ -544,7 +545,10 @@ const DraftWelcome: React.FC<{ exiting?: boolean }> = ({ exiting = false }) => {
             'oc-draft-center flex min-h-0 flex-1 flex-col items-center justify-center px-6 text-center transition-opacity duration-[120ms] ease-out motion-reduce:transition-none',
             exiting && 'pointer-events-none opacity-0',
         )}>
-            <h1 className="text-balance text-3xl font-normal tracking-tight text-foreground">
+            <h1 className={cn(
+                'text-balance text-3xl font-normal tracking-tight text-foreground',
+                shouldReveal && 'oc-motion-reveal',
+            )}>
                 {renderDraftTitle(
                     projectLabel
                         ? t('chat.emptyState.draftTitleWithProject', { project: projectLabel })
@@ -555,6 +559,7 @@ const DraftWelcome: React.FC<{ exiting?: boolean }> = ({ exiting = false }) => {
             <DraftPresetChips
                 onSubmit={(starter) => useInputStore.getState().requestPresetSubmit(starter.submitText, starter.ref.type)}
                 className="oc-draft-starters mt-8 max-w-md"
+                reveal={reveal}
             />
         </div>
     );
@@ -590,6 +595,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     const materializedDraftSessionId = useSessionUIStore((s) => s.materializedDraftSessionId);
     const clearMaterializedDraftSession = useSessionUIStore((s) => s.clearMaterializedDraftSession);
     const openNewSessionDraft = useSessionUIStore((s) => s.openNewSessionDraft);
+    const consumeNewSessionDraftPresentationReveal = useSessionUIStore((s) => s.consumeNewSessionDraftPresentationReveal);
     const setCurrentSession = useSessionUIStore((s) => s.setCurrentSession);
     const newSessionDraft = useSessionUIStore((s) => s.newSessionDraft);
 
@@ -1229,6 +1235,22 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
     const draftPresentationExiting = draftExitAnimating
         || (previousDraftOpenRef.current && !draftOpen && shouldAnimateDraftTransition);
     const draftLayoutVisible = draftOpen || draftPresentationExiting;
+    const draftPresentationRevealPending = Boolean(
+        active
+        && draftOpen
+        && newSessionDraft.presentationRevealPending
+        && !isDesktopExpandedInput
+        && (useCompactDraftLayout || !promptReadOnly),
+    );
+
+    React.useLayoutEffect(() => {
+        if (!draftPresentationRevealPending) return;
+        consumeNewSessionDraftPresentationReveal(newSessionDraft.draftId);
+    }, [
+        consumeNewSessionDraftPresentationReveal,
+        draftPresentationRevealPending,
+        newSessionDraft.draftId,
+    ]);
 
     React.useLayoutEffect(() => {
         if (draftOpen) {
@@ -1302,7 +1324,13 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
             if (!useCompactDraftLayout || isDesktopExpandedInput) {
                 return null;
             }
-            return <DraftWelcome exiting={draftPresentationExiting} />;
+            return (
+                <DraftWelcome
+                    key={newSessionDraft.draftId}
+                    exiting={draftPresentationExiting}
+                    reveal={draftPresentationRevealPending}
+                />
+            );
         }
 
         const showHydrationSkeleton = isSessionHydrating && sessionMessages.length === 0 && !sessionIsWorking;
@@ -1486,6 +1514,7 @@ export const ChatContainer: React.FC<ChatContainerProps> = ({
                         scrollToBottom={scrollToBottomOnSend}
                         scrollToLatest={resumeToLatestInstant}
                         draftPresentationExiting={draftPresentationExiting}
+                        draftPresentationReveal={draftPresentationRevealPending}
                     />
                 )}
             </div>

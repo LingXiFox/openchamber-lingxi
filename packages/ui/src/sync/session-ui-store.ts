@@ -264,6 +264,7 @@ function notifyMessageSent(sessionId: string): void {
 export type NewSessionDraftState = {
   draftId: number
   open: boolean
+  presentationRevealPending: boolean
   selectedProjectId?: string | null
   directoryOverride: string | null
   permissionAutoAcceptEnabled?: boolean
@@ -329,6 +330,7 @@ export type SessionUIState = {
   prepareForRuntimeSwitch: (apiBaseUrl?: string | null) => void
   restoreForRuntimeSwitch: (apiBaseUrl?: string | null) => void
   openNewSessionDraft: (options?: Partial<NewSessionDraftState> & { automatic?: boolean }) => void
+  consumeNewSessionDraftPresentationReveal: (draftId: number) => void
   prepareChatDraftDirectory: () => Promise<string | null>
   closeNewSessionDraft: () => void
   setNewSessionDraftTarget: (target: { projectId?: string | null; selectedProjectId?: string | null; directoryOverride?: string | null }, options?: { force?: boolean }) => void
@@ -569,6 +571,7 @@ const activateConfigForDirectory = async (directory: string | null | undefined):
 const DEFAULT_DRAFT: NewSessionDraftState = {
   draftId: 0,
   open: false,
+  presentationRevealPending: false,
   directoryOverride: null,
   parentID: null,
   target: "chat",
@@ -1144,6 +1147,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     const nextDraft: NewSessionDraftState = {
       draftId: nextDraftId++,
       open: true,
+      presentationRevealPending: options?.automatic !== true,
       target,
       preparedChatDirectory: null,
       selectedProjectId: selectedProject?.id ?? null,
@@ -1196,6 +1200,14 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     }
 
     void recoverStaleDraftDirectory(nextDraft)
+  },
+
+  consumeNewSessionDraftPresentationReveal: (draftId) => {
+    const currentDraft = get().newSessionDraft
+    if (currentDraft.draftId !== draftId || !currentDraft.presentationRevealPending) return
+    const nextDraft = { ...currentDraft, presentationRevealPending: false }
+    set({ newSessionDraft: nextDraft })
+    writeRuntimeSessionMemory(runtimeMemoryKey(), { draft: nextDraft })
   },
 
   prepareChatDraftDirectory: async () => {
@@ -1255,6 +1267,7 @@ export const useSessionUIStore = create<SessionUIState>()((set, get) => ({
     const nextDraft: NewSessionDraftState = {
       draftId: currentDraft.draftId,
       open: false,
+      presentationRevealPending: false,
       target: "chat",
       preparedChatDirectory: null,
       selectedProjectId: null,
