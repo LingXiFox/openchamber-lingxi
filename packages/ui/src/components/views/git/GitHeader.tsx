@@ -14,6 +14,7 @@ import { WorktreeBranchDisplay } from './WorktreeBranchDisplay';
 import { SyncActions } from './SyncActions';
 import type {
   GitStatus,
+  GitBranchComparison,
   GitIdentityProfile,
   GitRemote,
   GitRemoteComparison,
@@ -29,6 +30,7 @@ interface GitHeaderProps {
   localBranches: string[];
   remoteBranches: string[];
   branchInfo: Record<string, { ahead?: number; behind?: number }> | undefined;
+  healthByBranch?: Map<string, GitBranchComparison> | null;
   syncAction: SyncAction;
   remotes: GitRemote[];
   onFetch: (remote: GitRemote) => void;
@@ -236,6 +238,7 @@ export const GitHeader: React.FC<GitHeaderProps> = ({
   localBranches,
   remoteBranches,
   branchInfo,
+  healthByBranch,
   syncAction,
   remotes,
   onFetch,
@@ -422,6 +425,7 @@ export const GitHeader: React.FC<GitHeaderProps> = ({
               localBranches={localBranches}
               remoteBranches={remoteBranches}
               branchInfo={branchInfo}
+              healthByBranch={healthByBranch}
               onCheckout={onCheckoutBranch}
               onCreate={onCreateBranch}
               remotes={remotes}

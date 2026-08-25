@@ -720,6 +720,22 @@ export function registerGitRoutes(app) {
     }
   });
 
+  app.post('/api/git/rebase/plan', async (req, res) => {
+    const { planRebase } = await getGitLibraries();
+    try {
+      const directory = req.body?.directory;
+      const branch = req.body?.branch;
+      const onto = req.body?.onto;
+      if (!directory || !branch || !onto) {
+        return res.status(400).json({ error: 'directory, branch, and onto are required' });
+      }
+      res.json(await planRebase(directory, { branch, onto }));
+    } catch (error) {
+      console.error('Failed to plan rebase:', error);
+      res.status(500).json({ error: error.message || 'Failed to plan rebase' });
+    }
+  });
+
   app.post('/api/git/rebase', async (req, res) => {
     const { rebase } = await getGitLibraries();
     try {
@@ -749,6 +765,22 @@ export function registerGitRoutes(app) {
     } catch (error) {
       console.error('Failed to abort rebase:', error);
       res.status(500).json({ error: error.message || 'Failed to abort rebase' });
+    }
+  });
+
+  app.post('/api/git/merge/precheck', async (req, res) => {
+    const { precheckMerge } = await getGitLibraries();
+    try {
+      const directory = req.body?.directory;
+      const source = req.body?.source;
+      const target = req.body?.target;
+      if (!directory || !source || !target) {
+        return res.status(400).json({ error: 'directory, source, and target are required' });
+      }
+      res.json(await precheckMerge(directory, { source, target }));
+    } catch (error) {
+      console.error('Failed to run merge precheck:', error);
+      res.status(500).json({ error: error.message || 'Failed to run merge precheck' });
     }
   });
 
@@ -870,6 +902,81 @@ export function registerGitRoutes(app) {
     } catch (error) {
       console.error('Failed to get branches:', error);
       res.status(500).json({ error: error.message || 'Failed to get branches' });
+    }
+  });
+
+  app.post('/api/git/branches/compare', async (req, res) => {
+    const { compareBranches } = await getGitLibraries();
+    try {
+      const directory = req.body?.directory;
+      if (!directory || typeof directory !== 'string') {
+        return res.status(400).json({ error: 'directory is required' });
+      }
+
+      const base = typeof req.body?.base === 'string' && req.body.base.trim() ? req.body.base.trim() : undefined;
+      const result = await compareBranches(directory, { base });
+      res.json(result);
+    } catch (error) {
+      console.error('Failed to compare branches:', error);
+      res.status(500).json({ error: error.message || 'Failed to compare branches' });
+    }
+  });
+
+  app.get('/api/git/stacks', async (req, res) => {
+    const { getPatchStacks } = await getGitLibraries();
+    try {
+      const directory = resolveDirectoryQuery(req.query.directory);
+      if (!directory) {
+        return res.status(400).json({ error: 'directory parameter is required' });
+      }
+
+      const baseValue = Array.isArray(req.query.base) ? '' : String(req.query.base || '').trim();
+      const base = baseValue || undefined;
+      res.json(await getPatchStacks(directory, { base }));
+    } catch (error) {
+      console.error('Failed to get patch stacks:', error);
+      res.status(500).json({ error: error.message || 'Failed to get patch stacks' });
+    }
+  });
+
+  app.get('/api/git/tags', async (req, res) => {
+    const { getTags } = await getGitLibraries();
+    try {
+      const directory = resolveDirectoryQuery(req.query.directory);
+      if (!directory) {
+        return res.status(400).json({ error: 'directory parameter is required' });
+      }
+
+      const result = await getTags(directory);
+      res.json(result);
+    } catch (error) {
+      console.error('Failed to get tags:', error);
+      res.status(500).json({ error: error.message || 'Failed to get tags' });
+    }
+  });
+
+  app.post('/api/git/graph/trace', async (req, res) => {
+    const { traceCommit } = await getGitLibraries();
+    try {
+      const directory = req.body?.directory;
+      if (!directory || typeof directory !== 'string') {
+        return res.status(400).json({ error: 'directory is required' });
+      }
+
+      const hash = req.body?.hash;
+      if (!hash || typeof hash !== 'string') {
+        return res.status(400).json({ error: 'hash is required' });
+      }
+
+      const limit = Number(req.body?.limit);
+      const result = await traceCommit(directory, {
+        hash,
+        limit: Number.isFinite(limit) ? limit : undefined,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error('Failed to trace commit:', error);
+      res.status(500).json({ error: error.message || 'Failed to trace commit' });
     }
   });
 

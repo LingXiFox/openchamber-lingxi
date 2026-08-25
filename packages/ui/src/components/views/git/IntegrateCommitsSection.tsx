@@ -28,10 +28,12 @@ import {
   integrateWorktreeCommits,
   getIntegrateConflictDetails,
   isCherryPickInProgress,
+  precheckIntegrationFirstStep,
   type IntegrateConflictDetails,
   type IntegrateInProgress,
   type IntegratePlan,
 } from '@/lib/git/integrateWorktreeCommits';
+import type { GitMergePrecheckResponse } from '@/lib/api/types';
 import type { WorktreeMetadata } from '@/types/worktree';
 import { useI18n } from '@/lib/i18n';
 
@@ -90,6 +92,35 @@ export const IntegrateCommitsSection: React.FC<{
   const [ui, setUi] = React.useState<IntegrateUiState>({ kind: 'idle' });
   const [showAllCommits, setShowAllCommits] = React.useState(false);
   const [commitSummaries, setCommitSummaries] = React.useState<Array<{ sha: string; short: string; subject: string }>>([]);
+  const [firstStepPrecheck, setFirstStepPrecheck] = React.useState<
+    | { kind: 'idle' }
+    | { kind: 'loading' }
+    | { kind: 'done'; result: GitMergePrecheckResponse }
+    | { kind: 'failed' }
+  >({ kind: 'idle' });
+
+  // Partial precheck, deliberately: only the FIRST commit of the cherry-pick
+  // sequence is simulated. A clean first step must never be presented as a
+  // conflict-free full integration.
+  const firstSequenceCommit = ui.kind === 'ready' || ui.kind === 'running' ? ui.plan.commits[0] : undefined;
+  React.useEffect(() => {
+    if (!firstSequenceCommit) {
+      setFirstStepPrecheck({ kind: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setFirstStepPrecheck({ kind: 'loading' });
+    precheckIntegrationFirstStep({ repoRoot, source: firstSequenceCommit, target: targetBranch })
+      .then((result) => {
+        if (!cancelled) setFirstStepPrecheck({ kind: 'done', result });
+      })
+      .catch(() => {
+        if (!cancelled) setFirstStepPrecheck({ kind: 'failed' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [firstSequenceCommit, repoRoot, targetBranch]);
 
   const conflictStorageKey = React.useMemo(() => {
     if (!currentSessionId) return null;
@@ -465,6 +496,34 @@ export const IntegrateCommitsSection: React.FC<{
                   </div>
                 )}
               </div>
+
+              {firstStepPrecheck.kind !== 'idle' ? (
+                <div className="space-y-1 rounded-md border border-border/60 bg-background/60 p-2">
+                  <div className="flex items-center gap-1.5 typography-micro">
+                    <span className="text-muted-foreground">{t('gitView.integrate.firstStepPrecheck')}:</span>
+                    {firstStepPrecheck.kind === 'loading' ? (
+                      <span className="flex items-center gap-1 text-muted-foreground">
+                        <Icon name="loader-4" className="size-3 animate-spin shrink-0" />
+                        {t('gitView.precheck.checking')}
+                      </span>
+                    ) : firstStepPrecheck.kind === 'done' && firstStepPrecheck.result.clean ? (
+                      <span className="flex items-center gap-1 text-status-success">
+                        <Icon name="check" className="size-3 shrink-0" />
+                        {t('gitView.precheck.clean')}
+                      </span>
+                    ) : firstStepPrecheck.kind === 'done' ? (
+                      <span className="font-medium text-status-warning">
+                        {t('gitView.precheck.conflicts', { count: firstStepPrecheck.result.conflictedFiles.length })}
+                      </span>
+                    ) : (
+                      <span className="text-status-warning">{t('gitView.precheck.failed')}</span>
+                    )}
+                  </div>
+                  <div className="typography-micro text-muted-foreground/80">
+                    {t('gitView.integrate.fullSequenceNotSimulated')}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 

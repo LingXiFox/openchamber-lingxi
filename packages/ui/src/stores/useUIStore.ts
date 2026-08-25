@@ -681,6 +681,13 @@ interface UIStore {
   worktreesPageProjectId: string | null;
   isSettingsDialogOpen: boolean;
   isNewWorktreeDialogOpen: boolean;
+  /**
+   * Branch to prefill the new-worktree dialog's source branch with. Set right
+   * before opening the dialog; the dialog consumes (and clears) it on open so
+   * a later manual open starts fresh.
+   */
+  newWorktreeSourceBranchHint: string | null;
+  setNewWorktreeSourceBranchHint: (branch: string | null) => void;
   isModelSelectorOpen: boolean;
   sidebarSection: SidebarSection;
 
@@ -1058,6 +1065,10 @@ export const useUIStore = create<UIStore>()(
         worktreesPageProjectId: null,
         isSettingsDialogOpen: false,
         isNewWorktreeDialogOpen: false,
+        newWorktreeSourceBranchHint: null,
+        setNewWorktreeSourceBranchHint: (branch) => {
+          set({ newWorktreeSourceBranchHint: branch });
+        },
         isModelSelectorOpen: false,
         sidebarSection: 'sessions',
         settingsPage: 'home',

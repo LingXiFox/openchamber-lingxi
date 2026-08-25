@@ -1343,6 +1343,8 @@ export const settingsDict = {
   'settings.openchamber.worktrees.list.empty': '이 프로젝트의 worktree를 찾을 수 없습니다',
   'settings.openchamber.worktrees.list.detachedHead': 'Detached HEAD',
   'settings.openchamber.worktrees.list.deleteWorktreeAria': 'worktree {name} 삭제',
+  'settings.openchamber.worktrees.list.stackMembershipWithParent': '{group} · {parent} 위에 스택됨',
+  'settings.openchamber.worktrees.list.stackMembershipSolo': '{group}',
   'settings.agents.modelSelector.title': '모델 선택',
   'settings.agents.modelSelector.searchPlaceholder': '모델 검색',
   'settings.agents.modelSelector.selectPlaceholder': '모델 선택...',

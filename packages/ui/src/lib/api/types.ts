@@ -457,6 +457,101 @@ export interface GitLogOptions {
   all?: boolean;
 }
 
+/** Per-branch comparison against a base ref, from local refs only (no network). */
+export interface GitBranchComparison {
+  branch: string;
+  tip: string;
+  /** Commits the branch has that base does not. */
+  ahead: number | null;
+  /** Commits base has that the branch does not. */
+  behind: number | null;
+  mergeBase: string | null;
+  lastCommitUnix: number | null;
+  isBase?: boolean;
+  isCurrent?: boolean;
+}
+
+export interface GitBranchCompareResponse {
+  base: string;
+  current: string | null;
+  comparisons: GitBranchComparison[];
+  truncated: boolean;
+}
+
+export interface GitPatchStackEntry {
+  branch: string;
+  dependsOn: string | null;
+}
+
+export interface GitPatchStackGroup {
+  id: string;
+  name?: string;
+  source: 'config' | 'inferred' | 'prefix';
+  chains: GitPatchStackEntry[];
+}
+
+export interface GitPatchStacksResponse {
+  base: string;
+  groups: GitPatchStackGroup[];
+  ungrouped: string[];
+  truncated: boolean;
+}
+
+export type GitRebasePlanWarning =
+  | 'downstream-history-rewrite'
+  | 'working-tree-dirty'
+  | 'no-unique-commits'
+  | 'unrelated-histories';
+
+export interface GitRebasePlanResponse {
+  branch: string;
+  onto: string;
+  commitsOnBranch: Array<{ hash: string; subject: string }>;
+  downstream: Array<{ branch: string; why: string }>;
+  warnings: GitRebasePlanWarning[];
+}
+
+/**
+ * Read-only conflict precheck for merging `source` into `target` (one
+ * merge-tree command; touches neither index nor working tree).
+ */
+export interface GitMergePrecheckResponse {
+  clean: boolean;
+  conflictedFiles: string[];
+  engine: 'modern' | 'legacy';
+}
+
+export interface GitTagEntry {
+  name: string;
+  hash: string;
+  creatordateUnix: number | null;
+  objectType: string;
+}
+
+export interface GitTagsResponse {
+  tags: GitTagEntry[];
+}
+
+/**
+ * Provenance trace for one commit. `containedBy` lists branches/tags whose
+ * history reaches the commit; it is NOT a full descendants walk. `ancestors`
+ * is capped by `limit`, with `total` reporting the untruncated count.
+ */
+export interface GitTraceResponse {
+  hash: string;
+  ancestors: {
+    commits: Array<{ hash: string; parents: string[] }>;
+    total: number;
+    truncated: boolean;
+  };
+  containedBy: {
+    branches: string[];
+    tags: string[];
+  };
+  mergeBaseWithHead: string | null;
+  isAncestorOfHead: boolean;
+}
+
 export interface GeneratedCommitMessage {
   subject: string;
   highlights: string[];
@@ -484,6 +579,18 @@ export interface GitAPI {
   getGitRangeDiff?(directory: string, options: GetGitRangeDiffOptions): Promise<GitDiffResponse>;
   getGitRangeFiles?(directory: string, options: GetGitRangeFilesOptions): Promise<GitRangeFileEntry[]>;
   getBranchBase?(directory: string, branch: string): Promise<GitBranchBaseResponse>;
+  /** Branch topology vs a base ref. Web runtime only (VS Code bridge lacks it). */
+  getBranchCompare?(directory: string, options?: { base?: string }): Promise<GitBranchCompareResponse>;
+  /** Local tag listing for release/snapshot detection. Web runtime only. */
+  getGitTags?(directory: string): Promise<GitTagsResponse>;
+  /** Commit provenance trace (ancestors + containment). Web runtime only. */
+  traceCommit?(directory: string, options: { hash: string; limit?: number }): Promise<GitTraceResponse>;
+  /** Patch dependency chains from local refs and optional repo config. Web runtime only. */
+  getPatchStacks?(directory: string, options?: { base?: string }): Promise<GitPatchStacksResponse>;
+  /** Read-only impact plan for a single-branch rebase. Web runtime only. */
+  planRebase?(directory: string, options: { branch: string; onto: string }): Promise<GitRebasePlanResponse>;
+  /** Read-only merge conflict precheck (merge-tree). Web runtime only. */
+  precheckMerge?(directory: string, options: { source: string; target: string }): Promise<GitMergePrecheckResponse>;
   revertGitFile(directory: string, filePath: string, options?: { scope?: 'all' | 'working' }): Promise<void>;
   stageGitFile(directory: string, filePath: string): Promise<void>;
   stageGitFiles?(directory: string, filePaths: string[]): Promise<void>;
