@@ -52,7 +52,8 @@ type SortableTabsStripProps = {
   className?: string;
 };
 
-// Keep in sync with `.pill-tabs__indicator--is-animated` in index.css.
+// Keep in sync with `.pill-tabs__indicator--is-animated` in index.css and with
+// --motion-duration-indicator (CSS vars cannot feed this JS nudge window).
 const PILL_SWITCH_ANIMATION_MS = 280;
 const PILL_NUDGE_PX = 4;
 

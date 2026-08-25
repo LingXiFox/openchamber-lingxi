@@ -449,6 +449,32 @@ describe('openNewSessionDraft project binding', () => {
     expect(draft.open).toBe(true);
     expect(draft.selectedProjectId).toBe(projectB.id);
   });
+
+  test('reveals explicit drafts once without replaying after draft updates', () => {
+    useSessionUIStore.getState().openNewSessionDraft({
+      automatic: true,
+      target: 'project',
+      selectedProjectId: projectB.id,
+    });
+    expect(useSessionUIStore.getState().newSessionDraft.presentationRevealPending).toBe(false);
+
+    useSessionUIStore.getState().openNewSessionDraft({ target: 'project', selectedProjectId: projectB.id });
+    const draftId = useSessionUIStore.getState().newSessionDraft.draftId;
+    expect(useSessionUIStore.getState().newSessionDraft.presentationRevealPending).toBe(true);
+
+    useSessionUIStore.getState().consumeNewSessionDraftPresentationReveal(draftId + 1);
+    expect(useSessionUIStore.getState().newSessionDraft.presentationRevealPending).toBe(true);
+
+    useSessionUIStore.getState().consumeNewSessionDraftPresentationReveal(draftId);
+    expect(useSessionUIStore.getState().newSessionDraft.presentationRevealPending).toBe(false);
+
+    useSessionUIStore.getState().overrideNewSessionDraftTarget({ title: 'Updated asynchronously' });
+    expect(useSessionUIStore.getState().newSessionDraft.presentationRevealPending).toBe(false);
+
+    useSessionUIStore.getState().openNewSessionDraft({ target: 'project', selectedProjectId: projectA.id });
+    expect(useSessionUIStore.getState().newSessionDraft.draftId).not.toBe(draftId);
+    expect(useSessionUIStore.getState().newSessionDraft.presentationRevealPending).toBe(true);
+  });
 });
 
 describe('createSession draft lifecycle', () => {

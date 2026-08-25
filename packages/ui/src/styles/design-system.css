@@ -23,6 +23,24 @@
     --oc-glass-tooltip-opacity: 62%;
     --oc-glass-saturation: 1.24;
 
+    /* Semantic motion foundation. Components choose intent, not raw timing. */
+    --motion-duration-instant: 0ms;
+    --motion-duration-fast: 120ms;
+    --motion-duration-normal: 160ms;
+    --motion-duration-panel: 200ms;
+    --motion-duration-reveal: 280ms;
+    /* Selection indicator travel (tabs): state-transition family, not reveal. */
+    --motion-duration-indicator: 280ms;
+    --motion-ease-linear: linear;
+    --motion-ease-standard: ease-out;
+    --motion-ease-emphasized: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-ease-mobile-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+    --motion-distance-xs: 2px;
+    --motion-distance-sm: 8px;
+    --motion-distance-md: 12px;
+    --motion-scale-subtle: 0.98;
+    --motion-scale-icon: 0.92;
+
     /* Semantic typography defaults (must match SEMANTIC_TYPOGRAPHY) */
     --text-markdown: 0.9375rem;
     --text-code: 0.8125rem;
@@ -214,6 +232,172 @@
   -webkit-backdrop-filter: blur(var(--oc-glass-blur)) saturate(var(--oc-glass-saturation));
   backdrop-filter: blur(var(--oc-glass-blur)) saturate(var(--oc-glass-saturation));
 }
+
+  @keyframes oc-motion-reveal {
+    from {
+      opacity: 0;
+      transform: translateY(var(--motion-distance-sm));
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .oc-motion-reveal {
+    animation: oc-motion-reveal var(--motion-duration-reveal) var(--motion-ease-emphasized) both;
+  }
+
+  .oc-motion-overlay-backdrop {
+    transition: opacity var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .oc-motion-overlay-surface,
+  .oc-motion-overlay-menu,
+  .oc-motion-overlay-preview,
+  .oc-motion-overlay-tooltip {
+    transition-property: opacity, transform;
+    transition-duration: var(--motion-duration-normal);
+    transition-timing-function: var(--motion-ease-standard);
+  }
+
+  .oc-motion-overlay-tooltip {
+    transition-duration: var(--motion-duration-fast);
+  }
+
+  .oc-motion-overlay-backdrop[data-starting-style],
+  .oc-motion-overlay-backdrop[data-ending-style],
+  .oc-motion-overlay-backdrop[data-visible="false"] {
+    opacity: 0;
+  }
+
+  .oc-motion-overlay-surface[data-starting-style],
+  .oc-motion-overlay-surface[data-ending-style],
+  .oc-motion-overlay-preview[data-visible="false"],
+  .oc-motion-overlay-tooltip[data-starting-style],
+  .oc-motion-overlay-tooltip[data-ending-style] {
+    opacity: 0;
+    transform: scale(var(--motion-scale-subtle));
+  }
+
+  .oc-motion-overlay-menu[data-starting-style],
+  .oc-motion-overlay-menu[data-ending-style] {
+    opacity: 0;
+    transform: scale(var(--motion-scale-subtle));
+  }
+
+  .oc-motion-overlay-menu[data-side="bottom"][data-starting-style],
+  .oc-motion-overlay-menu[data-side="bottom"][data-ending-style] {
+    transform: translateY(calc(-1 * var(--motion-distance-xs))) scale(var(--motion-scale-subtle));
+  }
+
+  .oc-motion-overlay-menu[data-side="top"][data-starting-style],
+  .oc-motion-overlay-menu[data-side="top"][data-ending-style] {
+    transform: translateY(var(--motion-distance-xs)) scale(var(--motion-scale-subtle));
+  }
+
+  .oc-motion-overlay-menu[data-side="left"][data-starting-style],
+  .oc-motion-overlay-menu[data-side="left"][data-ending-style] {
+    transform: translateX(var(--motion-distance-xs)) scale(var(--motion-scale-subtle));
+  }
+
+  .oc-motion-overlay-menu[data-side="right"][data-starting-style],
+  .oc-motion-overlay-menu[data-side="right"][data-ending-style] {
+    transform: translateX(calc(-1 * var(--motion-distance-xs))) scale(var(--motion-scale-subtle));
+  }
+
+  /* Fixed-slot state swap: the slot keeps its geometry; only the incoming and
+     outgoing glyphs crossfade through opacity + subtle scale. */
+  @keyframes oc-motion-swap-in {
+    from {
+      opacity: 0;
+      transform: scale(var(--motion-scale-icon));
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes oc-motion-swap-out {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    to {
+      opacity: 0;
+      transform: scale(var(--motion-scale-icon));
+    }
+  }
+
+  .oc-motion-swap-in {
+    animation: oc-motion-swap-in var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .oc-motion-swap-out {
+    animation: oc-motion-swap-out var(--motion-duration-fast) var(--motion-ease-standard) both;
+  }
+
+  /* Bounded disclosure indicator (chevron) rotation. */
+  .oc-motion-indicator {
+    transition-property: transform;
+    transition-duration: var(--motion-duration-fast);
+    transition-timing-function: var(--motion-ease-standard);
+  }
+
+  .oc-motion-state-icon {
+    transition-property: opacity, transform;
+    transition-duration: var(--motion-duration-fast);
+    transition-timing-function: var(--motion-ease-standard);
+  }
+
+  /* Bounded pulse for first-load lazy surface placeholders. Opacity-only and
+     self-terminating: the placeholder unmounts the moment the chunk lands. */
+  @keyframes oc-motion-placeholder-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.55;
+    }
+  }
+
+  .oc-motion-placeholder-pulse {
+    animation: oc-motion-placeholder-pulse 1.4s var(--motion-ease-standard) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .oc-motion-reveal {
+      animation-duration: var(--motion-duration-instant);
+    }
+
+    .oc-motion-overlay-backdrop,
+    .oc-motion-overlay-surface,
+    .oc-motion-overlay-menu,
+    .oc-motion-overlay-preview,
+    .oc-motion-overlay-tooltip {
+      transition-duration: var(--motion-duration-instant);
+    }
+
+    .oc-motion-swap-in,
+    .oc-motion-swap-out {
+      animation-duration: var(--motion-duration-instant);
+    }
+
+    .oc-motion-indicator,
+    .oc-motion-state-icon {
+      transition-duration: var(--motion-duration-instant);
+    }
+
+    .oc-motion-placeholder-pulse {
+      animation: none;
+    }
+  }
 
 .oc-glass-popover {
   --oc-glass-color: var(--surface-elevated);

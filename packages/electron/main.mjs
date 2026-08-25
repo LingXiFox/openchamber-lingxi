@@ -42,6 +42,9 @@ const execFileAsync = promisify(execFile);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const isDev = process.env.OPENCHAMBER_ELECTRON_DEV === '1' || !app.isPackaged;
+const sandboxRoot = isDev && process.env.OPENCHAMBER_SANDBOX_ROOT
+  ? path.resolve(process.env.OPENCHAMBER_SANDBOX_ROOT)
+  : null;
 const electronStartupStartedAt = performance.now();
 
 const DEEP_LINK_PROTOCOL = 'openchamber';
@@ -88,7 +91,24 @@ app.setName('OpenChamber');
 if (process.platform === 'linux') {
   app.setDesktopName('openchamber.desktop');
 }
-if (isDev) {
+if (sandboxRoot) {
+  const sandboxElectronRoot = path.join(sandboxRoot, 'electron');
+  const sandboxPaths = {
+    home: path.join(sandboxRoot, 'home'),
+    appData: path.join(sandboxElectronRoot, 'app-data'),
+    userData: path.join(sandboxElectronRoot, 'user-data'),
+    sessionData: path.join(sandboxElectronRoot, 'session-data'),
+    cache: path.join(sandboxElectronRoot, 'cache'),
+    logs: path.join(sandboxElectronRoot, 'logs'),
+    temp: path.join(sandboxRoot, 'tmp'),
+  };
+  for (const directory of Object.values(sandboxPaths)) {
+    fs.mkdirSync(directory, { recursive: true });
+  }
+  for (const [name, directory] of Object.entries(sandboxPaths)) {
+    app.setPath(name, directory);
+  }
+} else if (isDev) {
   app.setPath('userData', path.join(app.getPath('appData'), 'OpenChamber Dev'));
 }
 app.setAppUserModelId(APP_USER_MODEL_ID);
@@ -130,6 +150,33 @@ log.initialize();
 log.transports.file.maxSize = 5 * 1024 * 1024;
 log.transports.file.level = 'info';
 log.transports.console.level = isDev ? 'debug' : 'warn';
+
+if (sandboxRoot) {
+  const isInsideSandbox = (candidate) => {
+    const relative = path.relative(sandboxRoot, path.resolve(candidate));
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+  };
+  const isolationPaths = [
+    app.getPath('home'),
+    app.getPath('appData'),
+    app.getPath('userData'),
+    app.getPath('sessionData'),
+    app.getPath('cache'),
+    app.getPath('logs'),
+    app.getPath('temp'),
+    process.env.OPENCHAMBER_DATA_DIR,
+    process.env.OPENCHAMBER_MANAGED_PROCESS_REGISTRY,
+    process.env.OPENCHAMBER_OPENCODE_CWD,
+    process.env.OPENCODE_CONFIG_DIR,
+  ];
+  const isolated = isolationPaths.every((candidate) => Boolean(candidate) && isInsideSandbox(candidate));
+  log.info(`[sandbox] runtime mode: development sandbox`);
+  log.info(`[sandbox] userData: ${app.getPath('userData')}`);
+  log.info(`[sandbox] sessionData: ${app.getPath('sessionData')}`);
+  log.info(`[sandbox] cache: ${app.getPath('cache')}`);
+  log.info(`[sandbox] production isolation status: ${isolated ? 'isolated' : 'FAILED'}`);
+  if (!isolated) throw new Error('Development sandbox paths escaped OPENCHAMBER_SANDBOX_ROOT');
+}
 
 // The in-process web server runs in this same Node process and uses plain
 // `console.log/warn/error`. Without piping console through electron-log,
@@ -184,7 +231,7 @@ try {
 }
 
 try {
-  if (!app.isDefaultProtocolClient(DEEP_LINK_PROTOCOL)) {
+  if (!sandboxRoot && !app.isDefaultProtocolClient(DEEP_LINK_PROTOCOL)) {
     app.setAsDefaultProtocolClient(DEEP_LINK_PROTOCOL);
   }
 } catch (error) {
@@ -1474,6 +1521,8 @@ const inheritUserShellEnv = () => {
   // Clear before probing/merging so login-shell snapshots and children never
   // inherit the AppImage path as argv[0] via zsh's ARGV0 parameter (#2588).
   clearAppImageArgv0FromProcessEnv();
+
+  if (sandboxRoot) return;
 
   const shellEnv = loadShellEnv();
   if (!shellEnv) return;
@@ -2979,6 +3028,12 @@ const resolveInitialUrl = async () => {
     : startupProbePlan.probeHmrUi && await waitForHealth(hmrUiUrl, 8_000, 100)
     ? hmrUiUrl
     : localUrl;
+
+  if (sandboxRoot) {
+    const apiPort = localUrl ? new URL(localUrl).port : 'none';
+    const uiPort = localUiUrl ? new URL(localUiUrl).port || 'protocol' : 'none';
+    log.info(`[sandbox] active ports: api=${apiPort} ui=${uiPort}`);
+  }
 
   state.sidecarUrl = localUrl;
   const localAvailable = Boolean(localUrl);

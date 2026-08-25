@@ -45,6 +45,8 @@ type DraftPresetChipsProps = {
     onSubmit: (starter: ResolvedStarter) => void;
     /** Extra classes for the wrapper (e.g. width/spacing per surface). */
     className?: string;
+    /** Reveals this group only when it first mounts for an explicit new draft. */
+    reveal?: boolean;
 };
 
 // Droppable id for the mobile "drag a chip here to delete" target. Kept distinct
@@ -255,10 +257,11 @@ const AddStarterPicker: React.FC<{
  * Reorder is constrained to within a chip's own group; cross-group hovers are
  * ignored.
  */
-const DraftPresetChipsContent: React.FC<DraftPresetChipsProps> = ({ onSubmit, className }) => {
+const DraftPresetChipsContent: React.FC<DraftPresetChipsProps> = ({ onSubmit, className, reveal = false }) => {
     const { global, project, pinnable, ensureLoaded, addStarter, removeStarter, reorder } = useDraftStarters();
     const { isMobile } = useDeviceInfo();
     const [isDragging, setIsDragging] = React.useState(false);
+    const [shouldReveal] = React.useState(reveal);
 
     const sensors = useSensors(
         // Desktop: start dragging after a small move so a click still submits.
@@ -306,7 +309,11 @@ const DraftPresetChipsContent: React.FC<DraftPresetChipsProps> = ({ onSubmit, cl
             onDragCancel={handleDragCancel}
             onDragEnd={handleDragEnd}
         >
-            <div className={cn('flex flex-wrap items-center justify-center gap-2', className)}>
+            <div className={cn(
+                'flex flex-wrap items-center justify-center gap-2',
+                shouldReveal && 'oc-motion-reveal',
+                className,
+            )}>
                 {global.length > 0 ? (
                     <StarterGroup
                         items={global}

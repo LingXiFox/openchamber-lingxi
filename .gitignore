@@ -25,6 +25,8 @@ changelog-*.png
 local-dev*
 .tmp/
 /tmp/
+/.dev-sandbox/
+/.dev-sandbox-backups/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

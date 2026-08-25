@@ -138,8 +138,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, isMobile, children, cl
                 ['--oc-left-sidebar-width' as string]: `${isResizing ? currentWidth : openWidth}px`,
                 overflowX: 'clip',
                 transitionProperty: isResizing ? 'none' : 'width, min-width, max-width',
-                transitionDuration: '200ms',
-                transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                transitionDuration: 'var(--motion-duration-panel)',
+                transitionTimingFunction: 'var(--motion-ease-emphasized)',
             }}
             aria-hidden={!isOpen || appliedWidth === 0}
         >
@@ -166,7 +166,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, isMobile, children, cl
             )}
             <div
                 className={cn(
-                    'relative z-10 flex h-full shrink-0 flex-col transition-opacity duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none',
+                    'relative z-10 flex h-full shrink-0 flex-col transition-opacity duration-[var(--motion-duration-panel)] ease-[var(--motion-ease-emphasized)] motion-reduce:transition-none',
                     isResizing && 'pointer-events-none',
                     !isOpen && 'pointer-events-none select-none opacity-0'
                 )}
