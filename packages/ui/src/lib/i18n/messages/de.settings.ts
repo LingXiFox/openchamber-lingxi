@@ -1315,6 +1315,8 @@ export const settingsDict = {
   'settings.openchamber.worktrees.list.empty': 'Keine Worktrees für dieses Projekt gefunden',
   'settings.openchamber.worktrees.list.detachedHead': 'Detached HEAD',
   'settings.openchamber.worktrees.list.deleteWorktreeAria': 'Worktree {name} löschen',
+  'settings.openchamber.worktrees.list.stackMembershipWithParent': '{group} · auf {parent} gestapelt',
+  'settings.openchamber.worktrees.list.stackMembershipSolo': '{group}',
   'settings.agents.modelSelector.title': 'Modell auswählen',
   'settings.agents.modelSelector.searchPlaceholder': 'Modelle durchsuchen',
   'settings.agents.modelSelector.selectPlaceholder': 'Modell auswählen...',

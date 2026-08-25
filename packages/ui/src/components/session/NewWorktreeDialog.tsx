@@ -673,8 +673,23 @@ export function NewWorktreeDialog({
 
   // Reset state on each open. Resetting on close would empty the form during
   // the close animation, causing visible flicker.
+  //
+  // The caller-requested source-branch hint is read through a ref so clearing
+  // it cannot re-run this effect and wipe the value it just prefilled.
+  const newWorktreeSourceBranchHint = useUIStore((s) => s.newWorktreeSourceBranchHint);
+  const newWorktreeSourceBranchHintRef = React.useRef(newWorktreeSourceBranchHint);
+  newWorktreeSourceBranchHintRef.current = newWorktreeSourceBranchHint;
+  const setNewWorktreeSourceBranchHint = useUIStore((s) => s.setNewWorktreeSourceBranchHint);
   React.useLayoutEffect(() => {
     if (!open) return;
+
+    // A caller-requested source branch (e.g. "create worktree for this
+    // branch") wins over the saved/default preference; consume it so a later
+    // manual open starts fresh.
+    const hintedSourceBranch = newWorktreeSourceBranchHintRef.current;
+    if (hintedSourceBranch) {
+      setNewWorktreeSourceBranchHint(null);
+    }
 
     setMode('new-branch');
     setExistingBranchState({
@@ -699,12 +714,12 @@ export function NewWorktreeDialog({
       branchName: uniqueSlug,
       worktreeName: uniqueSlug,
       isSyncingWorktreeName: true,
-      sourceBranch: '',
+      sourceBranch: hintedSourceBranch ?? '',
       linkedIssue: null,
       linkedPr: null,
       includePrDiff: false,
     });
-  }, [open, generateUniqueSlug]);
+  }, [open, generateUniqueSlug, setNewWorktreeSourceBranchHint]);
 
   // Sync worktree name with branch name for new-branch mode
   React.useEffect(() => {

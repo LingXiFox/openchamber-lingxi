@@ -915,13 +915,30 @@ const isMissingDirectoryError = (error) => {
   return /directory that does not exist|does not exist|no such file or directory/i.test(text);
 };
 
-const runGitCommand = async (cwd, args) => {
+// Timeout tiers so git subprocesses can never hang a request forever. The
+// tier is chosen per command class, not globally: local reads stay tight,
+// local mutations get room to finish, network commands tolerate slow remotes.
+const GIT_COMMAND_TIMEOUTS = {
+  localRead: 20_000,
+  mutation: 120_000,
+  network: 300_000,
+};
+
+const resolveGitCommandTimeoutMs = (timeoutMs) => {
+  if (typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0) {
+    return timeoutMs;
+  }
+  return undefined;
+};
+
+const runGitCommand = async (cwd, args, { timeoutMs } = {}) => {
   try {
     const { stdout, stderr } = await execFileAsync(getGitBinary(), args, {
       cwd,
       env: await buildGitEnv(),
       windowsHide: true,
       maxBuffer: 20 * 1024 * 1024,
+      timeout: resolveGitCommandTimeoutMs(timeoutMs),
     });
     return {
       success: true,
@@ -955,8 +972,8 @@ const resolveGitCommitFilePath = async (repoRoot, hash, candidates) => {
   throw new Error('Invalid file path');
 };
 
-const runGitCommandOrThrow = async (cwd, args, fallbackMessage) => {
-  const result = await runGitCommand(cwd, args);
+const runGitCommandOrThrow = async (cwd, args, fallbackMessage, options) => {
+  const result = await runGitCommand(cwd, args, options);
   if (!result.success) {
     throw new Error(result.message || fallbackMessage || 'Git command failed');
   }
@@ -3755,6 +3772,515 @@ async function filterActiveRemoteBranches(git, remoteBranches) {
   } catch (error) {
     console.warn('Failed to filter active remote branches, returning all:', error.message);
     return remoteBranches;
+  }
+}
+
+// Branch topology comparisons are pure local-ref reads; they must never wait
+// on the network (see getBranches' ls-remote path) so an offline remote cannot
+// turn "unknown health" into "no health data".
+const BRANCH_COMPARE_MAX_BRANCHES = 30;
+
+const parseNullSeparatedRefListing = (stdout) => String(stdout || '')
+  .split('\n')
+  .map((line) => line.trim())
+  .filter(Boolean)
+  .map((line) => line.split('\0'))
+  .map((fields) => fields.map((field) => field.trim()));
+
+export async function compareBranches(directory, options = {}) {
+  const { repoRoot } = await createRepositoryGitContext(directory);
+  const read = (args, fallbackMessage) =>
+    runGitCommandOrThrow(repoRoot, args, fallbackMessage, { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+
+  try {
+    const headResult = await runGitCommand(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+    const currentBranch = headResult.success ? headResult.stdout.trim() : '';
+    const current = currentBranch && currentBranch !== 'HEAD' ? currentBranch : null;
+
+    let base = typeof options.base === 'string' && options.base.trim() ? options.base.trim() : current;
+    if (!base) {
+      // Detached HEAD with no explicit base: fall back to the recorded default
+      // branch of origin before giving up.
+      const originHead = await runGitCommand(repoRoot, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+      const originHeadValue = originHead.success ? originHead.stdout.trim().replace(/^origin\//, '') : '';
+      base = originHeadValue || null;
+    }
+    if (!base) {
+      throw new Error('Unable to resolve a base branch; pass one explicitly');
+    }
+
+    const baseVerify = await runGitCommand(repoRoot, ['rev-parse', '--verify', '--quiet', `${base}^{commit}`], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+    if (!baseVerify.success || !baseVerify.stdout.trim()) {
+      throw new Error(`Base branch not found: ${base}`);
+    }
+    const baseTip = baseVerify.stdout.trim();
+
+    const listing = await read(['for-each-ref', 'refs/heads', '--format=%(refname:short)%00%(objectname)%00%(committerdate:unix)'], 'Failed to list local branches');
+    const localBranches = parseNullSeparatedRefListing(listing.stdout).map(([name, tip, committerDate]) => ({
+      branch: name,
+      tip,
+      lastCommitUnix: Number(committerDate) || null,
+    }));
+
+    const truncated = localBranches.length > BRANCH_COMPARE_MAX_BRANCHES;
+    const selected = truncated ? localBranches.slice(0, BRANCH_COMPARE_MAX_BRANCHES) : localBranches;
+
+    const comparisons = await Promise.all(selected.map(async ({ branch, tip, lastCommitUnix }) => {
+      if (tip === baseTip) {
+        return { branch, tip, ahead: 0, behind: 0, mergeBase: tip, lastCommitUnix, isBase: true, isCurrent: branch === current };
+      }
+
+      const [mergeBaseResult, countsResult] = await Promise.all([
+        runGitCommand(repoRoot, ['merge-base', baseTip, tip], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead }),
+        runGitCommand(repoRoot, ['rev-list', '--left-right', '--count', `${baseTip}...${tip}`], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead }),
+      ]);
+
+      const mergeBase = mergeBaseResult.success ? mergeBaseResult.stdout.trim() || null : null;
+      const counts = parseAheadBehindCounts(countsResult.success ? countsResult.stdout.trim() : '');
+      // `base...tip`: left column is commits only base has (the branch's
+      // behind), right column is commits only the branch has (its ahead).
+      const behind = counts?.ahead ?? null;
+      const ahead = counts?.behind ?? null;
+      const unrelated = !mergeBase;
+
+      return {
+        branch,
+        tip,
+        ahead: unrelated ? 0 : ahead,
+        behind: unrelated ? 0 : behind,
+        mergeBase,
+        lastCommitUnix,
+        isBase: false,
+        isCurrent: branch === current,
+      };
+    }));
+
+    return { base, current, comparisons, truncated };
+  } catch (error) {
+    console.error('Failed to compare branches:', error);
+    throw error;
+  }
+}
+
+const parsePatchStackConfigString = (value) => (
+  Object.prototype.toString.call(value) === '[object String]' ? String(value).trim() : null
+);
+
+const readPatchStackConfig = async (repoRoot, patchBranches) => {
+  try {
+    const parsed = JSON.parse(await fsp.readFile(path.join(repoRoot, '.openchamber-stacks.json'), 'utf8'));
+    if (!Array.isArray(parsed?.stacks)) return [];
+
+    const claimed = new Set();
+    return parsed.stacks.flatMap((stack, index) => {
+      if (!Array.isArray(stack?.branches)) return [];
+      const branches = stack.branches.map(parsePatchStackConfigString).filter((branch) => {
+        if (!branch || !patchBranches.has(branch) || claimed.has(branch)) return false;
+        claimed.add(branch);
+        return true;
+      });
+      if (branches.length === 0) return [];
+      const name = parsePatchStackConfigString(stack.name) || undefined;
+      const group = {
+        id: `config:${name || index}`,
+        source: 'config',
+        chains: branches.map((branch, branchIndex) => ({
+          branch,
+          dependsOn: branchIndex > 0 ? branches[branchIndex - 1] : null,
+        })),
+      };
+      if (name) group.name = name;
+      return [group];
+    });
+  } catch {
+    return [];
+  }
+};
+
+export async function getPatchStacks(directory, options = {}) {
+  const { repoRoot } = await createRepositoryGitContext(directory);
+  let base = String(options.base || '').trim();
+  if (!base) {
+    const originHead = await runGitCommand(repoRoot, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+    const candidates = [
+      originHead.success ? originHead.stdout.trim().replace(/^origin\//, '') : '',
+      'main',
+      'master',
+    ].filter(Boolean);
+    for (const candidate of candidates) {
+      const verified = await runGitCommand(repoRoot, ['rev-parse', '--verify', '--quiet', `${candidate}^{commit}`], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+      if (verified.success) {
+        base = candidate;
+        break;
+      }
+    }
+  }
+  const comparison = await compareBranches(directory, { base: base || undefined });
+  const readBranchesMergedInto = async (ref) => {
+    const result = await runGitCommandOrThrow(
+      repoRoot,
+      ['for-each-ref', `--merged=${ref}`, '--format=%(refname:short)', 'refs/heads'],
+      `Failed to inspect branch ancestry for ${ref}`,
+      { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead },
+    );
+    return new Set(result.stdout.split('\n').map((line) => line.trim()).filter(Boolean));
+  };
+
+  const mergedIntoBase = await readBranchesMergedInto(comparison.base);
+  const patches = comparison.comparisons.filter((row) => !row.isBase && !mergedIntoBase.has(row.branch));
+  const patchNames = new Set(patches.map((row) => row.branch));
+  const configuredGroups = await readPatchStackConfig(repoRoot, patchNames);
+  const configuredBranches = new Set(configuredGroups.flatMap((group) => group.chains.map((entry) => entry.branch)));
+  const automaticPatches = patches.filter((row) => !configuredBranches.has(row.branch));
+  const automaticNames = new Set(automaticPatches.map((row) => row.branch));
+  const tips = new Map(automaticPatches.map((row) => [row.branch, row.tip]));
+  const ancestorsByBranch = new Map(await Promise.all(automaticPatches.map(async (row) => {
+    const merged = await readBranchesMergedInto(row.tip);
+    return [row.branch, new Set([...merged].filter((branch) => (
+      branch !== row.branch
+      && automaticNames.has(branch)
+      && tips.get(branch) !== row.tip
+    )))];
+  })));
+
+  const parentByBranch = new Map();
+  for (const [branch, candidates] of ancestorsByBranch) {
+    const direct = [...candidates].filter((candidate) => ![...candidates].some((other) => (
+      other !== candidate && ancestorsByBranch.get(other)?.has(candidate)
+    )));
+    if (direct.length === 1) parentByBranch.set(branch, direct[0]);
+  }
+
+  const related = new Set([...parentByBranch.keys(), ...parentByBranch.values()]);
+  const inferredGroups = [];
+  while (related.size > 0) {
+    const first = related.values().next().value;
+    const component = new Set([first]);
+    const queue = [first];
+    while (queue.length > 0) {
+      const branch = queue.shift();
+      const neighbours = [
+        parentByBranch.get(branch),
+        ...[...parentByBranch].filter(([, parent]) => parent === branch).map(([child]) => child),
+      ].filter(Boolean);
+      for (const neighbour of neighbours) {
+        if (component.has(neighbour)) continue;
+        component.add(neighbour);
+        queue.push(neighbour);
+      }
+    }
+    component.forEach((branch) => related.delete(branch));
+    const depth = (branch) => {
+      let current = branch;
+      let value = 0;
+      while (parentByBranch.has(current)) {
+        value++;
+        current = parentByBranch.get(current);
+      }
+      return value;
+    };
+    const branches = [...component].sort((a, b) => depth(a) - depth(b) || a.localeCompare(b));
+    inferredGroups.push({
+      id: `inferred:${branches.join('|')}`,
+      source: 'inferred',
+      chains: branches.map((branch) => ({ branch, dependsOn: parentByBranch.get(branch) ?? null })),
+    });
+  }
+
+  const assigned = new Set([
+    ...configuredBranches,
+    ...inferredGroups.flatMap((group) => group.chains.map((entry) => entry.branch)),
+  ]);
+  const prefixBuckets = new Map();
+  for (const { branch } of patches) {
+    if (assigned.has(branch) || !branch.includes('/')) continue;
+    const suffix = branch.slice(branch.indexOf('/') + 1);
+    const bucket = prefixBuckets.get(suffix) ?? [];
+    bucket.push(branch);
+    prefixBuckets.set(suffix, bucket);
+  }
+  const prefixGroups = [...prefixBuckets]
+    .filter(([, branches]) => branches.length > 1)
+    .map(([name, branches]) => {
+      branches.forEach((branch) => assigned.add(branch));
+      return {
+        id: `prefix:${name}`,
+        name,
+        source: 'prefix',
+        chains: branches.sort().map((branch) => ({ branch, dependsOn: null })),
+      };
+    });
+
+  return {
+    base: comparison.base,
+    groups: [...configuredGroups, ...inferredGroups, ...prefixGroups],
+    ungrouped: patches.map((row) => row.branch).filter((branch) => !assigned.has(branch)).sort(),
+    truncated: comparison.truncated,
+  };
+}
+
+export async function planRebase(directory, options = {}) {
+  const { repoRoot } = await createRepositoryGitContext(directory);
+  const branch = String(options.branch || '').trim();
+  const onto = String(options.onto || '').trim();
+  if (!branch || !onto) throw new Error('branch and onto are required');
+  if (branch === onto) throw new Error('branch and onto must differ');
+
+  const resolveRef = async (ref) => {
+    const result = await runGitCommand(repoRoot, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+    if (!result.success || !result.stdout.trim()) throw new Error(`Branch not found: ${ref}`);
+    return result.stdout.trim();
+  };
+  const [branchHash, ontoHash] = await Promise.all([resolveRef(branch), resolveRef(onto)]);
+  const [commitResult, statusResult, mergeBaseResult, stacks] = await Promise.all([
+    runGitCommandOrThrow(
+      repoRoot,
+      ['log', '--reverse', '--no-merges', '--cherry-pick', '--right-only', '--pretty=format:%H%x1f%s', `${ontoHash}...${branchHash}`],
+      'Failed to inspect rebase commits',
+      { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead },
+    ),
+    runGitCommand(repoRoot, ['status', '--porcelain'], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead }),
+    runGitCommand(repoRoot, ['merge-base', branchHash, ontoHash], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead }),
+    getPatchStacks(directory),
+  ]);
+
+  const commitsOnBranch = commitResult.stdout.split('\n').filter(Boolean).map((line) => {
+    const [hash, subject = ''] = line.split('\x1f');
+    return { hash, subject };
+  });
+  const childrenByParent = new Map();
+  for (const group of stacks.groups) {
+    for (const entry of group.chains) {
+      if (!entry.dependsOn) continue;
+      const children = childrenByParent.get(entry.dependsOn) ?? [];
+      children.push(entry.branch);
+      childrenByParent.set(entry.dependsOn, children);
+    }
+  }
+  const downstream = [];
+  const queue = [branch];
+  const seen = new Set([branch]);
+  while (queue.length > 0) {
+    const parent = queue.shift();
+    for (const child of childrenByParent.get(parent) ?? []) {
+      if (seen.has(child)) continue;
+      seen.add(child);
+      downstream.push({ branch: child, why: parent });
+      queue.push(child);
+    }
+  }
+
+  const warnings = [];
+  if (downstream.length > 0) warnings.push('downstream-history-rewrite');
+  if (statusResult.success && statusResult.stdout.trim()) warnings.push('working-tree-dirty');
+  if (commitsOnBranch.length === 0) warnings.push('no-unique-commits');
+  if (!mergeBaseResult.success || !mergeBaseResult.stdout.trim()) warnings.push('unrelated-histories');
+
+  return { branch, onto, commitsOnBranch, downstream, warnings };
+}
+
+// git >= 2.38 has the machine-readable `merge-tree --write-tree` mode; older
+// git only offers the read-only three-argument form whose conflict blocks are
+// parsed heuristically. The probe runs once per process and is cached.
+let cachedMergeTreeEngine = null;
+
+const resolveMergeTreeEngine = async (repoRoot) => {
+  if (cachedMergeTreeEngine) return cachedMergeTreeEngine;
+  const result = await runGitCommand(repoRoot, ['--version'], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+  const match = String(result.stdout || '').match(/git version (\d+)\.(\d+)/);
+  const modern = Boolean(match) && (Number(match[1]) > 2 || (Number(match[1]) === 2 && Number(match[2]) >= 38));
+  cachedMergeTreeEngine = modern ? 'modern' : 'legacy';
+  return cachedMergeTreeEngine;
+};
+
+/**
+ * Extract conflicted file names from legacy three-argument merge-tree output.
+ * Every auto-resolvable change also prints indented `base|our|their <mode>
+ * <oid> <path>` rows (`added in remote`, clean merges included), so only
+ * blocks that contain conflict-marker lines count as conflicts.
+ * Exported for tests: real legacy git cannot be installed on demand.
+ */
+export const parseLegacyMergeTreeConflicts = (stdout) => {
+  const files = new Set();
+  let lastPath = null;
+  for (const line of String(stdout || '').split('\n')) {
+    const ref = line.match(/^\s{2}(?:base|our|their)\s+\d{6}\s+[0-9a-f]{7,40}\s+(.+)$/);
+    if (ref) {
+      lastPath = ref[1].trim();
+      continue;
+    }
+    if (/^\+<{7}|^\+={7}|^\+>{7}/.test(line) && lastPath) {
+      files.add(lastPath);
+    }
+  }
+  return [...files];
+};
+
+/**
+ * Read-only conflict precheck for merging `source` into `target`. One
+ * merge-tree command answers it; neither index nor working tree is touched.
+ * Rebase checks reuse it with target=onto as a first-order approximation.
+ * `options.engine` forces 'legacy' or 'modern' (test injection); production
+ * callers omit it and get the probed engine.
+ */
+export async function precheckMerge(directory, options = {}) {
+  const { repoRoot } = await createRepositoryGitContext(directory);
+  const source = String(options.source || '').trim();
+  const target = String(options.target || '').trim();
+  if (!source || !target) throw new Error('source and target are required');
+
+  const resolveRef = async (ref) => {
+    const result = await runGitCommand(repoRoot, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+    if (!result.success || !result.stdout.trim()) throw new Error(`Branch not found: ${ref}`);
+    return result.stdout.trim();
+  };
+  const [sourceHash, targetHash] = await Promise.all([resolveRef(source), resolveRef(target)]);
+  const engine = options.engine === 'legacy' || options.engine === 'modern'
+    ? options.engine
+    : await resolveMergeTreeEngine(repoRoot);
+
+  if (engine === 'modern') {
+    // Exit 0 = clean; exit 1 = conflicts. stdout is the written tree oid,
+    // then (--name-only) conflicted paths up to a blank line, then free-form
+    // informational messages ("Auto-merging…", "CONFLICT…") that must not be
+    // mistaken for file names.
+    const result = await runGitCommand(
+      repoRoot,
+      ['merge-tree', '--write-tree', '--name-only', targetHash, sourceHash],
+      { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead },
+    );
+    if (!result.success && result.exitCode !== 1) {
+      throw new Error(result.stderr?.trim() || 'merge-tree failed');
+    }
+    const lines = result.stdout.split('\n');
+    const endOfFiles = lines.indexOf('', 1);
+    const conflictedFiles = lines
+      .slice(1, endOfFiles === -1 ? lines.length : endOfFiles)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    return { clean: result.success, conflictedFiles, engine: 'modern' };
+  }
+
+  const baseResult = await runGitCommand(repoRoot, ['merge-base', targetHash, sourceHash], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+  if (!baseResult.success || !baseResult.stdout.trim()) throw new Error('No merge base between branches');
+  const treeResult = await runGitCommand(
+    repoRoot,
+    ['merge-tree', baseResult.stdout.trim(), targetHash, sourceHash],
+    { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead },
+  );
+  if (!treeResult.success) throw new Error(treeResult.stderr?.trim() || 'merge-tree failed');
+  const conflictedFiles = parseLegacyMergeTreeConflicts(treeResult.stdout);
+  return { clean: conflictedFiles.length === 0, conflictedFiles, engine: 'legacy' };
+}
+
+export async function getTags(directory) {
+  const { repoRoot } = await createRepositoryGitContext(directory);
+
+  try {
+    const result = await runGitCommandOrThrow(
+      repoRoot,
+      ['for-each-ref', 'refs/tags', '--sort=-creatordate', '--format=%(refname:short)%00%(objectname)%00%(creatordate:unix)%00%(objecttype)'],
+      'Failed to list tags',
+      { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead },
+    );
+
+    const tags = parseNullSeparatedRefListing(result.stdout).map(([name, objectname, creatordateUnix, objectType]) => ({
+      name,
+      hash: objectname,
+      creatordateUnix: Number(creatordateUnix) || null,
+      objectType: objectType || 'commit',
+    }));
+
+    return { tags };
+  } catch (error) {
+    console.error('Failed to get tags:', error);
+    throw error;
+  }
+}
+
+const TRACE_HASH_PATTERN = /^[0-9a-fA-F]{4,40}$/;
+const TRACE_DEFAULT_LIMIT = 300;
+const TRACE_MAX_LIMIT = 2000;
+
+const listRefsContaining = async (repoRoot, fullHash, args) => {
+  // `--contains` takes the commit directly; keep the format flag ahead of it.
+  const result = await runGitCommand(repoRoot, [...args, '--format=%(refname:short)', '--contains', fullHash], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+  if (!result.success) {
+    return [];
+  }
+  return result.stdout
+    .split('\n')
+    .map((line) => line.replace(/^\*\s+/, '').trim())
+    .map((name) => name.replace(/^remotes\//, ''))
+    .filter(Boolean);
+};
+
+/**
+ * Trace one commit's provenance. Answers three questions in a single read-only
+ * call: where does it come from (`ancestors`), which branches/tags already
+ * contain it (`containedBy` — deliberately NOT a full descendants walk), and
+ * how it relates to the current HEAD (`mergeBaseWithHead`, `isAncestorOfHead`).
+ */
+export async function traceCommit(directory, options = {}) {
+  const { repoRoot } = await createRepositoryGitContext(directory);
+  const read = (args, fallbackMessage) =>
+    runGitCommandOrThrow(repoRoot, args, fallbackMessage, { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+
+  try {
+    const hashInput = String(options.hash || '').trim();
+    if (!TRACE_HASH_PATTERN.test(hashInput)) {
+      throw new Error('Invalid commit hash');
+    }
+
+    const resolveResult = await runGitCommand(repoRoot, ['rev-parse', '--verify', '--quiet', `${hashInput}^{commit}`], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+    if (!resolveResult.success || !resolveResult.stdout.trim()) {
+      throw new Error(`Unknown commit: ${hashInput}`);
+    }
+    const fullHash = resolveResult.stdout.trim();
+
+    const rawLimit = Number(options.limit);
+    const limit = Math.min(Math.max(Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : TRACE_DEFAULT_LIMIT, 1), TRACE_MAX_LIMIT);
+
+    const [totalResult, logResult] = await Promise.all([
+      read(['rev-list', '--count', fullHash], 'Failed to count ancestors'),
+      runGitCommand(repoRoot, ['log', '--topo-order', '-n', String(limit), '--pretty=format:%H%x1f%P', fullHash], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead }),
+    ]);
+
+    const total = Number(totalResult.stdout.trim()) || 0;
+    const commits = logResult.success
+      ? logResult.stdout
+        .split('\n')
+        .map((line) => line.split('\x1f'))
+        .filter((fields) => fields[0])
+        .map(([hash, parents]) => ({
+          hash,
+          parents: parents ? parents.split(' ').filter(Boolean) : [],
+        }))
+      : [];
+
+    const [branches, tags] = await Promise.all([
+      listRefsContaining(repoRoot, fullHash, ['branch', '-a']),
+      listRefsContaining(repoRoot, fullHash, ['tag']),
+    ]);
+
+    const mergeBaseResult = await runGitCommand(repoRoot, ['merge-base', fullHash, 'HEAD'], { timeoutMs: GIT_COMMAND_TIMEOUTS.localRead });
+    const mergeBaseWithHead = mergeBaseResult.success ? mergeBaseResult.stdout.trim() || null : null;
+    const isAncestorOfHead = mergeBaseWithHead === fullHash;
+
+    return {
+      hash: fullHash,
+      ancestors: {
+        commits,
+        total,
+        truncated: total > commits.length,
+      },
+      containedBy: { branches, tags },
+      mergeBaseWithHead,
+      isAncestorOfHead,
+    };
+  } catch (error) {
+    console.error('Failed to trace commit:', error);
+    throw error;
   }
 }
 

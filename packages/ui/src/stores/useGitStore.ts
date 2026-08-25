@@ -6,6 +6,9 @@ import type {
   GitBranch,
   GitLogResponse,
   GitIdentitySummary,
+  GitBranchCompareResponse,
+  GitPatchStacksResponse,
+  GitTagsResponse,
 } from '@/lib/api/types';
 import { getDeferredSafeStorage } from '@/stores/utils/safeStorage';
 import { getRuntimeKey } from '@/lib/runtime-switch';
@@ -15,6 +18,9 @@ const REPO_CHECK_STALE_THRESHOLD = 60_000;
 const STATUS_STALE_THRESHOLD = 5_000;
 const BRANCHES_STALE_THRESHOLD = 30_000;
 const IDENTITY_STALE_THRESHOLD = 60_000;
+const COMPARE_STALE_THRESHOLD = 30_000;
+const STACKS_STALE_THRESHOLD = 30_000;
+const TAGS_STALE_THRESHOLD = 120_000;
 const DIFF_PREFETCH_MAX_FILES = 25;
 const DIFF_PREFETCH_FOCUS_MAX_FILES = 40;
 const DIFF_PREFETCH_CONCURRENCY = 2;
@@ -33,6 +39,9 @@ interface DirectoryGitState {
   branches: GitBranch | null;
   log: GitLogResponse | null;
   identity: GitIdentitySummary | null;
+  branchCompare: GitBranchCompareResponse | null;
+  patchStacks: GitPatchStacksResponse | null;
+  tags: GitTagsResponse | null;
   diffCache: Map<string, { original: string; modified: string; fetchedAt: number; isBinary?: boolean }>;
   indexRevision: number;
   lastRepoCheckAt: number;
@@ -41,6 +50,9 @@ interface DirectoryGitState {
   lastLogFetch: number;
   lastBranchesFetch: number;
   lastIdentityFetch: number;
+  lastCompareFetch: number;
+  lastStacksFetch: number;
+  lastTagsFetch: number;
   logMaxCount: number;
   isLoadingStatus: boolean;
   isLoadingLog: boolean;
@@ -61,6 +73,12 @@ interface GitStore {
   fetchBranches: (directory: string, git: GitAPI) => Promise<void>;
   fetchLog: (directory: string, git: GitAPI, maxCount?: number) => Promise<void>;
   fetchIdentity: (directory: string, git: GitAPI) => Promise<void>;
+  /** Branch topology vs base. No-op on runtimes without the endpoint. */
+  fetchBranchCompare: (directory: string, git: GitAPI, options?: { force?: boolean }) => Promise<void>;
+  /** Patch dependencies. No-op on runtimes without the endpoint. */
+  fetchPatchStacks: (directory: string, git: GitAPI, options?: { force?: boolean }) => Promise<void>;
+  /** Local tags for release detection. No-op on runtimes without the endpoint. */
+  fetchTags: (directory: string, git: GitAPI, options?: { force?: boolean }) => Promise<void>;
   fetchAll: (directory: string, git: GitAPI, options?: { force?: boolean; silentIfCached?: boolean }) => Promise<void>;
 
   ensureStatus: (directory: string, git: GitAPI) => Promise<void>;
@@ -95,6 +113,9 @@ interface GitAPI {
   getGitLog: (directory: string, options?: { maxCount?: number }) => Promise<GitLogResponse>;
   getCurrentGitIdentity: (directory: string) => Promise<GitIdentitySummary | null>;
   getGitFileDiff: (directory: string, options: { path: string }) => Promise<GitFileDiffResponse>;
+  getBranchCompare?: (directory: string, options?: { base?: string }) => Promise<GitBranchCompareResponse>;
+  getPatchStacks?: (directory: string, options?: { base?: string }) => Promise<GitPatchStacksResponse>;
+  getGitTags?: (directory: string) => Promise<GitTagsResponse>;
 }
 
 const inFlightDiffFetchesByDirectory = new Map<string, Set<string>>();
@@ -176,6 +197,9 @@ const createEmptyDirectoryState = (): DirectoryGitState => ({
   branches: null,
   log: null,
   identity: null,
+  branchCompare: null,
+  patchStacks: null,
+  tags: null,
   diffCache: new Map(),
   indexRevision: 0,
   lastRepoCheckAt: 0,
@@ -184,6 +208,9 @@ const createEmptyDirectoryState = (): DirectoryGitState => ({
   lastLogFetch: 0,
   lastBranchesFetch: 0,
   lastIdentityFetch: 0,
+  lastCompareFetch: 0,
+  lastStacksFetch: 0,
+  lastTagsFetch: 0,
   logMaxCount: 25,
   isLoadingStatus: false,
   isLoadingLog: false,
@@ -860,6 +887,67 @@ export const useGitStore = create<GitStore>()(
         }
       },
 
+      fetchBranchCompare: async (directory, git, options = {}) => {
+        if (typeof git.getBranchCompare !== 'function') return;
+        const { force = false } = options;
+        const existing = get().directories.get(directory);
+        const now = Date.now();
+        if (!force && existing?.branchCompare && now - (existing.lastCompareFetch || 0) < COMPARE_STALE_THRESHOLD) {
+          return;
+        }
+
+        try {
+          const branchCompare = await git.getBranchCompare(directory);
+          const nextDirectories = new Map(get().directories);
+          const dirState = nextDirectories.get(directory) ?? createEmptyDirectoryState();
+          nextDirectories.set(directory, { ...dirState, branchCompare, lastCompareFetch: Date.now() });
+          set({ directories: nextDirectories });
+        } catch (error) {
+          // Failure must not erase previously known comparisons.
+          console.error('Failed to fetch branch comparison:', error);
+        }
+      },
+
+      fetchPatchStacks: async (directory, git, options = {}) => {
+        if (!git.getPatchStacks) return;
+        const { force = false } = options;
+        const existing = get().directories.get(directory);
+        const now = Date.now();
+        if (!force && existing?.patchStacks && now - (existing.lastStacksFetch || 0) < STACKS_STALE_THRESHOLD) {
+          return;
+        }
+
+        try {
+          const patchStacks = await git.getPatchStacks(directory);
+          const nextDirectories = new Map(get().directories);
+          const dirState = nextDirectories.get(directory) ?? createEmptyDirectoryState();
+          nextDirectories.set(directory, { ...dirState, patchStacks, lastStacksFetch: Date.now() });
+          set({ directories: nextDirectories });
+        } catch (error) {
+          console.error('Failed to fetch patch stacks:', error);
+        }
+      },
+
+      fetchTags: async (directory, git, options = {}) => {
+        if (typeof git.getGitTags !== 'function') return;
+        const { force = false } = options;
+        const existing = get().directories.get(directory);
+        const now = Date.now();
+        if (!force && existing?.tags && now - (existing.lastTagsFetch || 0) < TAGS_STALE_THRESHOLD) {
+          return;
+        }
+
+        try {
+          const tags = await git.getGitTags(directory);
+          const nextDirectories = new Map(get().directories);
+          const dirState = nextDirectories.get(directory) ?? createEmptyDirectoryState();
+          nextDirectories.set(directory, { ...dirState, tags, lastTagsFetch: Date.now() });
+          set({ directories: nextDirectories });
+        } catch (error) {
+          console.error('Failed to fetch git tags:', error);
+        }
+      },
+
       fetchLog: async (directory, git, maxCount) => {
         const token = startRequest(directory, 'log');
         const { directories } = get();
@@ -951,6 +1039,12 @@ export const useGitStore = create<GitStore>()(
         }
 
         await get().fetchIdentity(directory, git);
+
+        // Health/release data rides along with the normal fetch cycle; both
+        // no-op on runtimes without the endpoints and keep their own staleness.
+        void get().fetchBranchCompare(directory, git, { force });
+        void get().fetchPatchStacks(directory, git, { force });
+        void get().fetchTags(directory, git, { force });
 
         // Diff prefetch deferred — triggered on-demand when Git tab opens (GitView reactive prefetch)
 
@@ -1162,6 +1256,11 @@ export const useGitStore = create<GitStore>()(
           if (!updatedState.identity || now - updatedState.lastIdentityFetch >= IDENTITY_STALE_THRESHOLD) {
             fetches.push(get().fetchIdentity(directory, git));
           }
+          fetches.push(
+            get().fetchBranchCompare(directory, git),
+            get().fetchPatchStacks(directory, git),
+            get().fetchTags(directory, git),
+          );
 
           if (fetches.length > 0) await Promise.all(fetches);
         })();
@@ -1211,6 +1310,27 @@ export const useGitIdentity = (directory: string | null) => {
   return useGitStore((state) => {
     if (!directory) return null;
     return state.directories.get(directory)?.identity ?? null;
+  });
+};
+
+export const useGitBranchCompare = (directory: string | null) => {
+  return useGitStore((state) => {
+    if (!directory) return null;
+    return state.directories.get(directory)?.branchCompare ?? null;
+  });
+};
+
+export const useGitPatchStacks = (directory: string | null) => {
+  return useGitStore((state) => {
+    if (!directory) return null;
+    return state.directories.get(directory)?.patchStacks ?? null;
+  });
+};
+
+export const useGitTags = (directory: string | null) => {
+  return useGitStore((state) => {
+    if (!directory) return null;
+    return state.directories.get(directory)?.tags ?? null;
   });
 };
 

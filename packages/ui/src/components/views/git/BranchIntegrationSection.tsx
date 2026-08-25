@@ -27,6 +27,7 @@ import { Icon } from "@/components/icon/Icon";
 import { cn } from '@/lib/utils';
 import { dropdownTriggerVariants } from '@/components/ui/dropdown-trigger';
 import { useI18n } from '@/lib/i18n';
+import type { GitRebasePlanResponse, GitRebasePlanWarning } from '@/lib/api/types';
 
 type OperationType = 'merge' | 'rebase';
 
@@ -42,6 +43,7 @@ interface BranchIntegrationSectionProps {
   remoteBranches: string[];
   onMerge: (branch: string) => void;
   onRebase: (branch: string) => void;
+  loadRebasePlan?: (onto: string) => Promise<GitRebasePlanResponse>;
   disabled?: boolean;
   isOperating?: boolean;
   operationLogs?: OperationLogEntry[];
@@ -53,6 +55,7 @@ interface BranchIntegrationSectionProps {
    */
   mode?: 'dialog' | 'inline' | 'bare';
   defaultTargetBranch?: string;
+  defaultOperation?: OperationType;
 }
 
 export const BranchIntegrationSection: React.FC<BranchIntegrationSectionProps> = ({
@@ -61,21 +64,26 @@ export const BranchIntegrationSection: React.FC<BranchIntegrationSectionProps> =
   remoteBranches,
   onMerge,
   onRebase,
+  loadRebasePlan,
   disabled = false,
   isOperating = false,
   operationLogs = [],
   onOperationComplete,
   mode = 'dialog',
   defaultTargetBranch,
+  defaultOperation = 'merge',
 }) => {
   const { t } = useI18n();
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [operation, setOperation] = React.useState<OperationType>('merge');
+  const [operation, setOperation] = React.useState<OperationType>(defaultOperation);
   const [selectedBranch, setSelectedBranch] = React.useState<string | null>(null);
   const [branchDropdownOpen, setBranchDropdownOpen] = React.useState(false);
   const [branchSearch, setBranchSearch] = React.useState('');
   const searchInputRef = React.useRef<HTMLInputElement>(null);
   const logContainerRef = React.useRef<HTMLDivElement>(null);
+  const [rebasePlan, setRebasePlan] = React.useState<GitRebasePlanResponse | null>(null);
+  const [rebasePlanLoading, setRebasePlanLoading] = React.useState(false);
+  const [rebasePlanFailed, setRebasePlanFailed] = React.useState(false);
 
   const isDisabled = disabled || isOperating;
   const targetBranchLabel = currentBranch || t('gitView.branch.currentBranchFallback');
@@ -172,9 +180,47 @@ export const BranchIntegrationSection: React.FC<BranchIntegrationSectionProps> =
   }, [branchDropdownOpen]);
 
   React.useEffect(() => {
+    if (operation !== 'rebase' || !selectedBranch || !loadRebasePlan) {
+      setRebasePlan(null);
+      setRebasePlanLoading(false);
+      setRebasePlanFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setRebasePlan(null);
+    setRebasePlanLoading(true);
+    setRebasePlanFailed(false);
+    void loadRebasePlan(selectedBranch)
+      .then((plan) => {
+        if (!cancelled) setRebasePlan(plan);
+      })
+      .catch(() => {
+        if (!cancelled) setRebasePlanFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setRebasePlanLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadRebasePlan, operation, selectedBranch]);
+
+  React.useEffect(() => {
     if (mode === 'dialog' || selectedBranch) return;
     setSelectedBranch(resolveDefaultBranch());
   }, [mode, resolveDefaultBranch, selectedBranch]);
+
+  const getWarningMessage = (warning: GitRebasePlanWarning) => {
+    switch (warning) {
+      case 'downstream-history-rewrite': return t('gitView.rebasePlan.warning.downstream');
+      case 'working-tree-dirty': return t('gitView.rebasePlan.warning.dirty');
+      case 'no-unique-commits': return t('gitView.rebasePlan.warning.noCommits');
+      case 'unrelated-histories': return t('gitView.rebasePlan.warning.unrelated');
+    }
+  };
+
+  const rebasePlanPending = operation === 'rebase' && Boolean(loadRebasePlan)
+    && (rebasePlanLoading || rebasePlanFailed || !rebasePlan);
 
   const renderOperating = () => (
     <div className="space-y-3">
@@ -376,6 +422,52 @@ export const BranchIntegrationSection: React.FC<BranchIntegrationSectionProps> =
         </div>
       ) : null}
 
+      {operation === 'rebase' && selectedBranch && loadRebasePlan ? (
+        <div className="space-y-3 rounded-lg border border-border p-3">
+          <p className="typography-ui-label text-foreground">{t('gitView.rebasePlan.title')}</p>
+          {rebasePlanLoading ? (
+            <div className="flex items-center gap-2 typography-micro text-muted-foreground">
+              <Icon name="loader-4" className="size-3.5 animate-spin" />
+              {t('common.loading')}
+            </div>
+          ) : rebasePlanFailed ? (
+            <p className="typography-micro text-destructive">{t('gitView.rebasePlan.failed')}</p>
+          ) : rebasePlan ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <p className="typography-meta text-muted-foreground">
+                  {t('gitView.rebasePlan.uniqueCommits', { count: rebasePlan.commitsOnBranch.length })}
+                </p>
+                <div className="max-h-28 space-y-1 overflow-y-auto">
+                  {rebasePlan.commitsOnBranch.map((commit) => (
+                    <div key={commit.hash} className="flex gap-2 typography-micro">
+                      <span className="shrink-0 font-mono text-muted-foreground">{commit.hash.slice(0, 7)}</span>
+                      <span className="truncate text-foreground">{commit.subject}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <p className="typography-meta text-muted-foreground">
+                  {t('gitView.rebasePlan.downstream', { count: rebasePlan.downstream.length })}
+                </p>
+                {rebasePlan.downstream.map((entry) => (
+                  <p key={entry.branch} className="truncate typography-micro font-mono text-foreground">
+                    {t('gitView.rebasePlan.dependsOn', { branch: entry.branch, parent: entry.why })}
+                  </p>
+                ))}
+              </div>
+              {rebasePlan.warnings.map((warning) => (
+                <div key={warning} className="flex items-start gap-2 typography-micro text-[var(--status-warning)]">
+                  <Icon name="error-warning" className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{getWarningMessage(warning)}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {mode === 'dialog' ? (
         <DialogFooter className="gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={handleCancel}>
@@ -385,7 +477,7 @@ export const BranchIntegrationSection: React.FC<BranchIntegrationSectionProps> =
             variant="default"
             size="sm"
             onClick={handleConfirm}
-            disabled={!selectedBranch}
+            disabled={!selectedBranch || rebasePlanPending}
             className="gap-1.5"
           >
             {operation === 'merge' ? (
@@ -407,7 +499,7 @@ export const BranchIntegrationSection: React.FC<BranchIntegrationSectionProps> =
             {t('gitView.common.reset')}
           </Button>
           <div className="flex-1" />
-          <Button variant="default" size="sm" onClick={handleConfirm} disabled={isDisabled || !selectedBranch}>
+          <Button variant="default" size="sm" onClick={handleConfirm} disabled={isDisabled || !selectedBranch || rebasePlanPending}>
             {operation === 'merge' ? t('gitView.operation.merge') : t('gitView.operation.rebase')}
           </Button>
         </div>

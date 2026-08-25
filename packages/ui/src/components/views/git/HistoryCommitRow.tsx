@@ -14,12 +14,13 @@ import { useI18n } from '@/lib/i18n';
 import { getCommitFileDiff, type CommitFileDiffResponse } from '@/lib/gitApi';
 import { PierreDiffViewer } from '@/components/views/PierreDiffViewer';
 import { getLanguageFromExtension } from '@/lib/toolHelpers';
-import type { LanedCommit } from './gitGraph';
+import type { LanedCommit, PatchGraphNode } from './gitGraph';
 import { GitGraphSegment } from './GitGraphSegment';
 import * as git from '@/lib/gitApi';
 import { toast } from '@/components/ui/toast';
 import { formatDateTimeForPreference } from '@/lib/timeFormat';
 import { useUIStore, type TimeFormatPreference } from '@/stores/useUIStore';
+import { useGitBranches } from '@/stores/useGitStore';
 
 const HISTORY_DIFF_REQUEST_TIMEOUT_MS = 15000;
 const HISTORY_DIFF_LARGE_CHANGED_LINES = 500;
@@ -75,8 +76,15 @@ interface HistoryCommitRowProps {
   isLoadingFiles: boolean;
   onCopyHash: (hash: string) => void;
   directory: string | undefined;
+  /** Trace mode on: clicks set the trace root instead of expanding actions. */
+  traceActive?: boolean;
+  onSetTraceRoot?: (hash: string) => void;
+  /** This row belongs to the traced path (undefined = no trace selection yet). */
+  isTraceHighlighted?: boolean;
+  traceCommits?: Set<string> | null;
   onConflict?: (result: { conflict: boolean; conflictFiles?: string[]; operation: 'cherry-pick' | 'revert' | 'merge' | 'rebase' }) => void;
   onActionSuccess?: () => void;
+  semanticNode?: PatchGraphNode;
 }
 
 function formatCommitDate(date: string, timeFormatPreference: TimeFormatPreference) {
@@ -143,8 +151,13 @@ export const HistoryCommitRow = React.memo(({
   isLoadingFiles,
   onCopyHash,
   directory,
+  traceActive = false,
+  onSetTraceRoot,
+  isTraceHighlighted,
+  traceCommits,
   onConflict,
   onActionSuccess,
+  semanticNode,
 }: HistoryCommitRowProps) => {
   const { t } = useI18n();
   const timeFormatPreference = useUIStore((state) => state.timeFormatPreference);
@@ -290,6 +303,39 @@ export const HistoryCommitRow = React.memo(({
     }
   };
 
+  type PrecheckState =
+    | { kind: 'idle' }
+    | { kind: 'loading' }
+    | { kind: 'done'; result: import('@/lib/api/types').GitMergePrecheckResponse }
+    | { kind: 'failed' }
+    | { kind: 'unsupported' };
+
+  const [precheck, setPrecheck] = React.useState<PrecheckState>({ kind: 'idle' });
+
+  // While a merge/rebase confirmation banner is open, run the read-only
+  // conflict precheck with the same orientation as the command that will
+  // execute (merge folds the commit into HEAD; rebase replays HEAD onto it).
+  React.useEffect(() => {
+    if ((pendingAction !== 'merge' && pendingAction !== 'rebase') || !directory || !git.precheckMerge) {
+      setPrecheck({ kind: 'idle' });
+      return;
+    }
+    let cancelled = false;
+    setPrecheck({ kind: 'loading' });
+    git.precheckMerge(directory, pendingAction === 'merge'
+      ? { source: entry.hash, target: 'HEAD' }
+      : { source: 'HEAD', target: entry.hash })
+      .then((result) => {
+        if (!cancelled) setPrecheck(result ? { kind: 'done', result } : { kind: 'unsupported' });
+      })
+      .catch(() => {
+        if (!cancelled) setPrecheck({ kind: 'failed' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingAction, directory, entry.hash]);
+
   const loadFileDiff = React.useCallback(async (file: CommitFileEntry) => {
     const key = file.path;
     if (!directory) {
@@ -344,21 +390,68 @@ export const HistoryCommitRow = React.memo(({
     await loadFileDiff(file);
   }, [diffCache, forceRenderLargePaths, loadFileDiff, openDiffPaths]);
 
+  // Trace semantics: undefined highlight = no selection yet (nothing dimmed);
+  // once a trace root exists, rows outside the path are dimmed.
+  const traceSelectionActive = isTraceHighlighted !== undefined;
+  const isDimmed = traceSelectionActive && !isTraceHighlighted;
+
+  // Graph dot decoration: merge commits get a second outline; refs map to an
+  // outer ring (HEAD > tag > remote; plain local branches stay bare).
+  const isMergeCommit = entry.parents.length > 1;
+  const branchesData = useGitBranches(directory ?? null);
+  const remoteBranchNames = React.useMemo(() => {
+    const names = new Set<string>();
+    for (const name of branchesData?.all ?? []) {
+      if (name.startsWith('remotes/')) names.add(name.slice('remotes/'.length));
+    }
+    return names;
+  }, [branchesData]);
+  const refRing = React.useMemo(() => {
+    if (!entry.refs) return null;
+    if (/HEAD ->/.test(entry.refs)) return 'head' as const;
+    if (/tag: /.test(entry.refs)) return 'tag' as const;
+    // Remote decorations must match a known remote-tracking branch. A slash
+    // alone is not evidence: local branches like feat/x carry one too.
+    const isRemote = entry.refs
+      .split(',')
+      .map((ref) => ref.trim())
+      .some((ref) => !ref.startsWith('HEAD') && remoteBranchNames.has(ref));
+    return isRemote ? 'remote' as const : null;
+  }, [entry.refs, remoteBranchNames]);
+
   return (
     <li>
       <button
         type="button"
-        onClick={onToggle}
+        onClick={() => {
+          if (traceActive && onSetTraceRoot) {
+            onSetTraceRoot(entry.hash);
+            return;
+          }
+          onToggle();
+        }}
         className={cn(
           'w-full flex items-start gap-3 px-3 py-2 text-left transition-colors',
           isGraphMode
             ? 'hover:bg-[var(--interactive-hover)]/40'
-            : isExpanded ? 'bg-sidebar/90' : 'hover:bg-sidebar/40'
+            : isExpanded ? 'bg-sidebar/90' : 'hover:bg-sidebar/40',
+          traceActive && 'cursor-crosshair'
         )}
       >
         {isGraphMode && laned && totalLanes !== undefined ? (
           <div className="-my-2 shrink-0 self-stretch">
-            <GitGraphSegment laned={laned} totalLanes={totalLanes} isExpanded={isExpanded} />
+            <GitGraphSegment
+              laned={laned}
+              totalLanes={totalLanes}
+              isExpanded={isExpanded}
+              dimmed={isDimmed}
+              highlighted={traceSelectionActive ? Boolean(isTraceHighlighted) : false}
+              compound={(semanticNode?.commits.length ?? 0) > 1}
+              nodeColor={semanticNode?.color}
+              isMerge={isMergeCommit}
+              refRing={refRing}
+              traceCommits={traceCommits}
+            />
           </div>
         ) : (
           <div
@@ -367,7 +460,7 @@ export const HistoryCommitRow = React.memo(({
             aria-hidden
           />
         )}
-        <div className="min-w-0 flex-1">
+        <div className={cn('min-w-0 flex-1', isDimmed && 'opacity-35')}>
           {/* Ref badges */}
           {isGraphMode ? (() => {
             const badges = parseRefBadges(entry.refs);
@@ -390,8 +483,24 @@ export const HistoryCommitRow = React.memo(({
             ) : null;
           })() : null}
 
+          {semanticNode?.anchors.length ? (
+            <div className="mb-0.5 flex flex-wrap gap-1">
+              {semanticNode.anchors.map((anchor) => (
+                <span key={anchor} className="rounded bg-[var(--interactive-hover)] px-1.5 py-0 typography-micro font-medium text-foreground">
+                  {anchor === 'merge-base' ? t('gitView.graph.anchor.mergeBase') : t('gitView.graph.anchor.release')}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
           <p className="typography-ui-label font-medium text-foreground line-clamp-1">
-            {entry.message}
+            {semanticNode && semanticNode.commits.length > 1
+              ? semanticNode.kind === 'sync'
+                ? t('gitView.graph.syncGroup', { count: semanticNode.commits.length })
+                : semanticNode.stackName
+                  ? t('gitView.graph.stackGroupNamed', { name: semanticNode.stackName, count: semanticNode.commits.length })
+                  : t('gitView.graph.stackGroup', { count: semanticNode.commits.length })
+              : entry.message}
           </p>
           <div className="flex items-center gap-1 typography-meta text-muted-foreground">
             <div className="flex items-center gap-1 min-w-0 truncate">
@@ -433,9 +542,46 @@ export const HistoryCommitRow = React.memo(({
           {isGraphMode && pendingAction ? (
             /* Confirmation banner — replaces the button row while an action is pending */
             <div className="flex items-center gap-2 py-2 border-b border-border/30 mb-2">
-              <span className="typography-micro text-muted-foreground flex-1 min-w-0">
-                {t(`gitView.history.actions.${pendingAction}Confirm` as never)}
-              </span>
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="typography-micro text-muted-foreground">
+                  {t(`gitView.history.actions.${pendingAction}Confirm` as never)}
+                </span>
+                {(pendingAction === 'merge' || pendingAction === 'rebase') && precheck.kind !== 'idle' ? (
+                  <div className="min-w-0 space-y-1">
+                    {precheck.kind === 'loading' ? (
+                      <span className="flex items-center gap-1.5 typography-micro text-muted-foreground">
+                        <Icon name="loader-4" className="size-3 animate-spin shrink-0" />
+                        {t('gitView.precheck.checking')}
+                      </span>
+                    ) : precheck.kind === 'done' && precheck.result.clean ? (
+                      <span className="flex items-center gap-1.5 typography-micro text-status-success">
+                        <Icon name="check" className="size-3 shrink-0" />
+                        {t('gitView.precheck.clean')}
+                      </span>
+                    ) : precheck.kind === 'done' ? (
+                      <div className="space-y-1">
+                        <span className="block typography-micro text-status-warning">
+                          {t('gitView.precheck.conflicts', { count: precheck.result.conflictedFiles.length })}
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {precheck.result.conflictedFiles.slice(0, 6).map((file) => (
+                            <span key={file} title={file} className="max-w-full truncate rounded bg-muted/40 px-2 py-0.5 font-mono text-xs text-muted-foreground">
+                              {file}
+                            </span>
+                          ))}
+                          {precheck.result.conflictedFiles.length > 6 ? (
+                            <span className="text-xs text-muted-foreground">
+                              {t('gitView.integrate.moreFiles', { count: precheck.result.conflictedFiles.length - 6 })}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : precheck.kind === 'failed' ? (
+                      <span className="typography-micro text-status-warning">{t('gitView.precheck.failed')}</span>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
               <Button
                 variant="destructive" size="xs" className="h-6 shrink-0"
                 disabled={actionLoading !== null}

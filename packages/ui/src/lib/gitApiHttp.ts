@@ -448,6 +448,63 @@ export async function getGitBranches(directory: string): Promise<GitBranch> {
   return response.json();
 }
 
+export async function getBranchCompare(
+  directory: string,
+  options: { base?: string } = {}
+): Promise<import('./api/types').GitBranchCompareResponse> {
+  const response = await runtimeFetch(buildUrl(`${API_BASE}/branches/compare`, directory), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directory, base: options.base }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || 'Failed to compare branches');
+  }
+  return response.json();
+}
+
+export async function getPatchStacks(
+  directory: string,
+  options: { base?: string } = {}
+): Promise<import('./api/types').GitPatchStacksResponse> {
+  const params = new URLSearchParams({ directory });
+  if (options.base) params.set('base', options.base);
+  const response = await runtimeFetch(`${API_BASE}/stacks?${params.toString()}`);
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || 'Failed to get patch stacks');
+  }
+  return response.json();
+}
+
+export async function getGitTags(directory: string): Promise<import('./api/types').GitTagsResponse> {
+  const response = await runtimeFetch(buildUrl(`${API_BASE}/tags`, directory));
+  if (!response.ok) {
+    throw new Error(`Failed to get tags: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+export async function traceCommit(
+  directory: string,
+  options: { hash: string; limit?: number }
+): Promise<import('./api/types').GitTraceResponse> {
+  if (!options?.hash) {
+    throw new Error('hash is required to trace a commit');
+  }
+  const response = await runtimeFetch(buildUrl(`${API_BASE}/graph/trace`, directory), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directory, hash: options.hash, limit: options.limit }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || 'Failed to trace commit');
+  }
+  return response.json();
+}
+
 export async function deleteGitBranch(directory: string, payload: GitDeleteBranchPayload): Promise<{ success: boolean }> {
   if (!payload?.branch) {
     throw new Error('branch is required to delete a branch');
@@ -1067,6 +1124,38 @@ export async function rebase(
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
     throw new Error(error.error || 'Failed to rebase');
+  }
+  return response.json();
+}
+
+export async function planRebase(
+  directory: string,
+  options: { branch: string; onto: string }
+): Promise<import('./api/types').GitRebasePlanResponse> {
+  const response = await runtimeFetch(buildUrl(`${API_BASE}/rebase/plan`, directory), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directory, branch: options.branch, onto: options.onto }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || 'Failed to plan rebase');
+  }
+  return response.json();
+}
+
+export async function precheckMerge(
+  directory: string,
+  options: { source: string; target: string }
+): Promise<import('./api/types').GitMergePrecheckResponse> {
+  const response = await runtimeFetch(buildUrl(`${API_BASE}/merge/precheck`, directory), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directory, source: options.source, target: options.target }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || 'Failed to run merge precheck');
   }
   return response.json();
 }
