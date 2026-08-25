@@ -1,9 +1,9 @@
 import React from 'react';
 import { UsageCard } from './UsageCard';
 import { QuotaCredentials } from './QuotaCredentials';
-import { getVisibleQuotaProviders } from '@/lib/quota';
-import { isElectronShell, isDesktopLocalOriginActive } from '@/lib/desktop';
-import { useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
+import { formatQuotaGroupName, getVisibleQuotaProviders } from '@/lib/quota';
+import { findQuotaResult, useQuotaAutoRefresh, useQuotaStore } from '@/stores/useQuotaStore';
+import { useConfigStore } from '@/stores/useConfigStore';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { ProviderLogo } from '@/components/ui/ProviderLogo';
 import {
@@ -37,8 +37,8 @@ interface ModelInfo {
   windows: UsageWindows;
 }
 
-const isCredentialProvider = (providerId: QuotaProviderId | null): providerId is 'ollama-cloud' | 'cursor' | 'sub2api' => (
-  providerId === 'ollama-cloud' || providerId === 'cursor' || providerId === 'sub2api'
+const isCredentialProvider = (providerId: QuotaProviderId | null): providerId is 'ollama-cloud' | 'cursor' => (
+  providerId === 'ollama-cloud' || providerId === 'cursor'
 );
 
 export const UsagePage: React.FC = () => {
@@ -49,6 +49,7 @@ export const UsagePage: React.FC = () => {
   const setSelectedProvider = useQuotaStore((state) => state.setSelectedProvider);
   const loadSettings = useQuotaStore((state) => state.loadSettings);
   const fetchAllQuotas = useQuotaStore((state) => state.fetchAllQuotas);
+  const fetchProviderQuota = useQuotaStore((state) => state.fetchProviderQuota);
   const isLoading = useQuotaStore((state) => state.isLoading);
   const lastUpdated = useQuotaStore((state) => state.lastUpdated);
   const error = useQuotaStore((state) => state.error);
@@ -57,6 +58,7 @@ export const UsagePage: React.FC = () => {
   const selectedModels = useQuotaStore((state) => state.selectedModels);
   const toggleModelSelected = useQuotaStore((state) => state.toggleModelSelected);
   const applyDefaultSelections = useQuotaStore((state) => state.applyDefaultSelections);
+  const currentProviderId = useConfigStore((state) => state.currentProviderId);
   const quotaProviders = getVisibleQuotaProviders();
 
   useQuotaAutoRefresh();
@@ -65,6 +67,10 @@ export const UsagePage: React.FC = () => {
     void loadSettings();
     void fetchAllQuotas();
   }, [loadSettings, fetchAllQuotas]);
+
+  React.useEffect(() => {
+    if (currentProviderId) void fetchProviderQuota('sub2api', currentProviderId);
+  }, [currentProviderId, fetchProviderQuota]);
 
   React.useEffect(() => {
     if (selectedProviderId) {
@@ -77,18 +83,27 @@ export const UsagePage: React.FC = () => {
     setSelectedProvider(firstConfigured ?? quotaProviders[0]?.id ?? null);
   }, [results, selectedProviderId, setSelectedProvider, quotaProviders]);
 
-  const selectedResult = results.find((entry) => entry.providerId === selectedProviderId) ?? null;
+  const selectedResult = selectedProviderId
+    ? findQuotaResult(results, selectedProviderId, currentProviderId) ?? null
+    : null;
 
   const providerMeta = quotaProviders.find((provider) => provider.id === selectedProviderId);
-  const providerName = providerMeta?.name ?? selectedProviderId ?? t('settings.usage.sidebar.title');
+  const providerName = formatQuotaGroupName(
+    providerMeta?.name ?? selectedProviderId ?? t('settings.usage.sidebar.title'),
+    selectedProviderId ?? '',
+    selectedResult?.accountId,
+  );
   const usage = selectedResult?.usage;
-  const selectedProviderError = selectedResult?.configured && !selectedResult.ok
+  // Only genuine faults (auth expired, network failure) render as errors. An
+  // unmapped Sub2API account is a normal state — the current model just is not
+  // a Sub2API one — so it gets an informational note instead of a red banner.
+  const selectedProviderError = selectedResult && !selectedResult.ok && selectedResult.configured
     ? selectedResult.error
     : null;
+  const sub2ApiNoModelSelected = selectedProviderId === 'sub2api' && selectedResult?.configured === false;
   const showInDropdown = selectedProviderId ? dropdownProviderIds.includes(selectedProviderId) : false;
   const credentialProviderId = isCredentialProvider(selectedProviderId) ? selectedProviderId : null;
-  const hasCredentialsForm = credentialProviderId !== null
-    && (credentialProviderId !== 'sub2api' || !isElectronShell() || isDesktopLocalOriginActive());
+  const hasCredentialsForm = credentialProviderId !== null;
   const handleDropdownToggle = React.useCallback((enabled: boolean) => {
     if (!selectedProviderId) {
       return;
@@ -202,8 +217,15 @@ export const UsagePage: React.FC = () => {
         </div>
       )}
 
+      {sub2ApiNoModelSelected && (
+        <div className="mb-8 rounded-lg border border-[var(--surface-subtle)] bg-[var(--surface-subtle)] px-4 py-3">
+          <p className="typography-ui-label font-medium text-foreground">{t('settings.usage.page.state.sub2ApiNoModelTitle')}</p>
+          <p className="typography-meta text-muted-foreground mt-1">{t('settings.usage.page.state.sub2ApiNoModelDescription')}</p>
+        </div>
+      )}
+
       {/* Providers with an inline credentials form don't need the "go to Providers" banner — the form IS the fix. */}
-      {selectedResult && !selectedResult.configured && !hasCredentialsForm && (
+      {selectedResult && !selectedResult.configured && !hasCredentialsForm && selectedProviderId !== 'sub2api' && (
         <div className="mb-8 rounded-lg border border-[var(--status-warning-border)] bg-[var(--status-warning-background)] px-4 py-3">
           <p className="typography-ui-label font-medium text-[var(--status-warning)]">{t('settings.usage.page.state.providerNotConfiguredTitle')}</p>
           <p className="typography-meta text-[var(--status-warning)]/80 mt-1">

@@ -1219,6 +1219,8 @@ export const settingsDict = {
   'settings.usage.page.state.noData': 'No usage data available yet.',
   'settings.usage.page.state.refreshFailedTitle': 'Failed to refresh usage data',
   'settings.usage.page.state.providerNotConfiguredTitle': 'Provider not configured',
+  'settings.usage.page.state.sub2ApiNoModelTitle': 'No Sub2API model selected',
+  'settings.usage.page.state.sub2ApiNoModelDescription': 'Switch to a model whose OpenCode provider has a Sub2API mapping in quota/sub2api.json to see its balance.',
   'settings.usage.page.state.providerNotConfiguredDescription': 'Add credentials in the Providers tab to enable usage tracking.',
   'settings.usage.page.section.modelQuotas': 'Model Quotas',
   'settings.usage.page.section.otherModels': 'Other Models',

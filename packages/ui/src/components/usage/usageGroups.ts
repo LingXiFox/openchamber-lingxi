@@ -1,8 +1,9 @@
 import React from 'react';
 import { useI18n } from '@/lib/i18n';
-import { formatWindowLabel, getVisibleQuotaProviders } from '@/lib/quota';
+import { formatQuotaGroupName, formatWindowLabel, getVisibleQuotaProviders } from '@/lib/quota';
 import { getDisplayModelName } from '@/lib/quota/model-families';
-import { useQuotaStore } from '@/stores/useQuotaStore';
+import { findQuotaResult, useQuotaStore } from '@/stores/useQuotaStore';
+import { useConfigStore } from '@/stores/useConfigStore';
 import type { QuotaProviderId, UsageWindow } from '@/types';
 
 export type UsageLimitRow = {
@@ -28,30 +29,32 @@ export type UsageProviderGroup = {
  * the two cannot drift on which providers appear, how model rows are filtered,
  * or what counts as a provider-level status.
  *
- * Only providers the user put in the dropdown *and* that reported themselves as
- * configured are included — an unconfigured provider has nothing to say, and
- * listing it reads as a fault.
+ * Only providers the user put in the dropdown and that reported themselves as
+ * configured are included.
  */
 export const useUsageProviderGroups = (): UsageProviderGroup[] => {
   const { t } = useI18n();
   const quotaResults = useQuotaStore((state) => state.results);
   const dropdownProviderIds = useQuotaStore((state) => state.dropdownProviderIds);
   const selectedQuotaModels = useQuotaStore((state) => state.selectedModels);
+  const currentProviderId = useConfigStore((state) => state.currentProviderId);
 
   return React.useMemo<UsageProviderGroup[]>(() => {
-    const resultsByProvider = new Map(quotaResults.map((result) => [result.providerId, result]));
     return getVisibleQuotaProviders()
       .filter((providerMeta) => dropdownProviderIds.includes(providerMeta.id))
-      .filter((providerMeta) => resultsByProvider.get(providerMeta.id)?.configured === true)
-      .map((providerMeta) => {
-        const result = resultsByProvider.get(providerMeta.id)!;
+      .map((providerMeta) => ({
+        providerMeta,
+        result: findQuotaResult(quotaResults, providerMeta.id, currentProviderId),
+      }))
+      .flatMap(({ providerMeta, result }) => {
+        if (!result?.configured) return [];
         const rows: UsageLimitRow[] = [];
 
-        for (const [label, window] of Object.entries(result?.usage?.windows ?? {})) {
+        for (const [label, window] of Object.entries(result.usage?.windows ?? {})) {
           rows.push({ key: `window-${label}`, label: formatWindowLabel(label), window });
         }
 
-        const modelEntries = Object.entries(result?.usage?.models ?? {});
+        const modelEntries = Object.entries(result.usage?.models ?? {});
         const providerSelectedModels = selectedQuotaModels[providerMeta.id] ?? [];
         const visibleModelEntries = providerSelectedModels.length > 0
           ? modelEntries.filter(([modelName]) => providerSelectedModels.includes(modelName))
@@ -74,13 +77,13 @@ export const useUsageProviderGroups = (): UsageProviderGroup[] => {
             ? t('header.services.noRateLimitsReported')
             : null;
 
-        return {
+        return [{
           providerId: providerMeta.id,
-          providerName: providerMeta.name,
+          providerName: formatQuotaGroupName(providerMeta.name, providerMeta.id, result.accountId),
           planLabel: result.planLabel,
           rows,
           status,
-        };
+        }];
       });
-  }, [dropdownProviderIds, quotaResults, selectedQuotaModels, t]);
+  }, [currentProviderId, dropdownProviderIds, quotaResults, selectedQuotaModels, t]);
 };

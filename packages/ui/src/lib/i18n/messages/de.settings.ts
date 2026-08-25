@@ -1157,6 +1157,8 @@ export const settingsDict = {
   'settings.usage.page.state.noData': 'Noch keine Nutzungsdaten verfügbar.',
   'settings.usage.page.state.refreshFailedTitle': 'Aktualisierung der Nutzungsdaten fehlgeschlagen',
   'settings.usage.page.state.providerNotConfiguredTitle': 'Anbieter nicht konfiguriert',
+  'settings.usage.page.state.sub2ApiNoModelTitle': 'Kein Sub2API-Modell ausgewählt',
+  'settings.usage.page.state.sub2ApiNoModelDescription': 'Wechsle zu einem Modell, dessen OpenCode-Provider eine Sub2API-Zuordnung in quota/sub2api.json hat, um den Kontostand zu sehen.',
   'settings.usage.page.state.providerNotConfiguredDescription': 'Fügen Sie Anmeldeinformationen auf der Registerkarte \'Anbieter\' hinzu, um die Nutzungsverfolgung zu aktivieren.',
   'settings.usage.page.section.modelQuotas': 'Modell-Kontingente',
   'settings.usage.page.section.otherModels': 'Andere Modelle',

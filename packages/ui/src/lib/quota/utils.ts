@@ -22,8 +22,19 @@ export const formatQuotaValueLabel = (
   valueLabel: string | null | undefined,
   percent: number | null,
 ): string => {
+  if (valueLabel && percent !== null && Number.isFinite(percent)) {
+    return `${valueLabel} (${Math.round(percent)}%)`;
+  }
   return valueLabel ?? formatPercent(percent);
 };
+
+export const formatQuotaGroupName = (
+  providerName: string,
+  providerId: string,
+  accountId?: string | null,
+): string => (
+  providerId === 'sub2api' && accountId ? `${providerName} · ${accountId}` : providerName
+);
 
 export const formatQuotaResetLabel = (
   resetAt: number | null,

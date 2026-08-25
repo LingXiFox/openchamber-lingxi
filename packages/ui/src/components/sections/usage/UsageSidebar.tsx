@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Icon } from "@/components/icon/Icon";
 import { cn } from '@/lib/utils';
-import { getVisibleQuotaProviders, resolveUsageTone } from '@/lib/quota';
-import { useQuotaStore } from '@/stores/useQuotaStore';
+import { formatQuotaGroupName, getVisibleQuotaProviders, resolveUsageTone } from '@/lib/quota';
+import { findQuotaResult, useQuotaStore } from '@/stores/useQuotaStore';
+import { useConfigStore } from '@/stores/useConfigStore';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { useI18n } from '@/lib/i18n';
 import { SETTINGS_PANEL_TITLE_CLASS } from '@/components/sections/shared/SettingsSection';
@@ -36,6 +37,7 @@ export const UsageSidebar: React.FC<UsageSidebarProps> = ({ onItemSelect }) => {
   const usageDisplayMode = useQuotaStore((state) => state.displayMode);
   const setUsageDisplayMode = useQuotaStore((state) => state.setDisplayMode);
   const loadUsageSettings = useQuotaStore((state) => state.loadSettings);
+  const currentProviderId = useConfigStore((state) => state.currentProviderId);
   const quotaProviders = getVisibleQuotaProviders();
 
   React.useEffect(() => {
@@ -95,7 +97,7 @@ export const UsageSidebar: React.FC<UsageSidebarProps> = ({ onItemSelect }) => {
 
       <ScrollableOverlay outerClassName="flex-1 min-h-0" className="space-y-1 px-3 py-2 overflow-x-hidden">
         {quotaProviders.map((provider) => {
-          const result = results.find((entry) => entry.providerId === provider.id);
+          const result = findQuotaResult(results, provider.id, currentProviderId);
           const percent = getUsagePercent(result?.usage);
           const tone = resolveUsageTone(percent);
           const isSelected = provider.id === selectedProviderId;
@@ -128,7 +130,7 @@ export const UsageSidebar: React.FC<UsageSidebarProps> = ({ onItemSelect }) => {
                 <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={statusStyle} />
                 <ProviderLogo providerId={provider.id} className="h-4 w-4 flex-shrink-0" />
                 <span className="typography-ui-label font-normal truncate flex-1 min-w-0 text-foreground">
-                  {provider.name}
+                  {formatQuotaGroupName(provider.name, provider.id, result?.accountId)}
                 </span>
               {!configured && (
                 <span className="typography-micro text-muted-foreground/60 flex-shrink-0">{t('settings.usage.sidebar.status.notSet')}</span>

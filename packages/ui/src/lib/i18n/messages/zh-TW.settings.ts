@@ -1094,6 +1094,8 @@ export const settingsDict = {
   'settings.usage.page.state.noData': '暫無用量資料。',
   'settings.usage.page.state.refreshFailedTitle': '重新整理用量資料失敗',
   'settings.usage.page.state.providerNotConfiguredTitle': '供應商未設定',
+  'settings.usage.page.state.sub2ApiNoModelTitle': '未選擇 Sub2API 模型',
+  'settings.usage.page.state.sub2ApiNoModelDescription': '切換到已在 quota/sub2api.json 配置 Sub2API 額度的模型後，這裡會顯示對應帳戶餘額。',
   'settings.usage.page.state.providerNotConfiguredDescription': '請在「供應商」分頁新增憑證以啟用用量追蹤。',
   'settings.usage.page.section.modelQuotas': '模型配額',
   'settings.usage.page.section.otherModels': '其他模型',

@@ -8,6 +8,7 @@ import { getRegisteredRuntimeAPIs } from '@/contexts/runtimeAPIRegistry';
 import { getDefaultModels } from '@/lib/quota/model-families';
 import { updateDesktopSettings } from '@/lib/persistence';
 import { runtimeFetch } from '@/lib/runtime-fetch';
+import { useConfigStore } from '@/stores/useConfigStore';
 
 const QUOTA_REFRESH_INTERVAL_MS = 3 * 60 * 1000;
 let quotaAutoRefreshConsumers = 0;
@@ -16,26 +17,41 @@ let quotaAutoRefreshInterval: number | null = null;
 type QuotaFetchDependencies = {
   runtimeFetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   canUseElectronDesktopIPC: () => boolean;
-  invokeDesktop: (command: string) => Promise<ProviderResult | null>;
+  invokeDesktop: (command: string, args?: Parameters<typeof invokeDesktop>[1]) => Promise<ProviderResult | null>;
 };
 
 const quotaFetchDependencies: QuotaFetchDependencies = {
   runtimeFetch,
   canUseElectronDesktopIPC,
-  invokeDesktop: (command) => invokeDesktop<ProviderResult>(command),
+  invokeDesktop: (command, args) => invokeDesktop<ProviderResult>(command, args),
 };
+
+export const findQuotaResult = (
+  results: readonly ProviderResult[],
+  providerId: QuotaProviderId,
+  accountId?: string | null,
+): ProviderResult | undefined => results.find((result) => (
+  result.providerId === providerId
+    && (providerId !== 'sub2api' || result.accountId === accountId)
+));
 
 export const fetchProviderQuotaResult = async (
   providerId: QuotaProviderId,
+  accountId?: string,
   dependencies = quotaFetchDependencies,
 ): Promise<ProviderResult> => {
+  if (providerId === 'sub2api' && !accountId) {
+    throw new Error('Select an OpenCode provider before fetching Sub2API quota');
+  }
+
   if (providerId === 'sub2api' && dependencies.canUseElectronDesktopIPC()) {
-    const payload = await dependencies.invokeDesktop('desktop_fetch_sub2api_quota');
+    const payload = await dependencies.invokeDesktop('desktop_fetch_sub2api_quota', { accountId });
     if (!payload) throw new Error('Desktop IPC unavailable');
     return payload;
   }
 
-  const response = await dependencies.runtimeFetch(`/api/quota/${encodeURIComponent(providerId)}`);
+  const query = providerId === 'sub2api' ? `?accountId=${encodeURIComponent(accountId ?? '')}` : '';
+  const response = await dependencies.runtimeFetch(`/api/quota/${encodeURIComponent(providerId)}${query}`);
   const payload = await response.json().catch(() => null);
   if (!response.ok) throw new Error(payload?.error || 'Failed to fetch quota');
   return payload;
@@ -59,7 +75,7 @@ interface QuotaStore extends QuotaSettingsState {
   loadSettings: () => Promise<void>;
   fetchAllQuotas: () => Promise<void>;
   fetchQuotas: (providerIds: QuotaProviderId[]) => Promise<void>;
-  fetchProviderQuota: (providerId: QuotaProviderId) => Promise<void>;
+  fetchProviderQuota: (providerId: QuotaProviderId, accountId?: string) => Promise<void>;
   setSelectedProvider: (providerId: QuotaProviderId | null) => void;
   setDisplayMode: (mode: 'usage' | 'remaining') => void;
   setDropdownProviderIds: (providerIds: QuotaProviderId[]) => void;
@@ -168,9 +184,10 @@ export const useQuotaStore = create<QuotaStore>()(
 
       fetchQuotas: async (providerIds) => {
         set({ isLoading: true, error: null });
+        const accountId = useConfigStore.getState().currentProviderId;
         try {
           await Promise.all(
-            providerIds.map((providerId) => get().fetchProviderQuota(providerId))
+            providerIds.map((providerId) => get().fetchProviderQuota(providerId, accountId))
           );
           set({
             isLoading: false,
@@ -186,22 +203,33 @@ export const useQuotaStore = create<QuotaStore>()(
         await get().fetchQuotas(getVisibleQuotaProviders().map((provider) => provider.id));
       },
 
-      fetchProviderQuota: async (providerId) => {
+      fetchProviderQuota: async (providerId, requestedAccountId) => {
+        const accountId = providerId === 'sub2api'
+          ? requestedAccountId ?? useConfigStore.getState().currentProviderId
+          : undefined;
+        const fetchKey = providerId === 'sub2api' ? `${providerId}:${accountId}` : providerId;
+        if (get().isFetchingProvider[fetchKey]) return;
         set((state) => ({
-          isFetchingProvider: { ...state.isFetchingProvider, [providerId]: true }
+          isFetchingProvider: { ...state.isFetchingProvider, [fetchKey]: true }
         }));
         try {
-          const result = await fetchProviderQuotaResult(providerId);
+          const result = await fetchProviderQuotaResult(providerId, accountId);
 
           set((state) => {
-            const next = state.results.filter((entry) => entry.providerId !== providerId);
+            const next = state.results.filter((entry) => (
+              entry.providerId !== providerId
+                || (providerId === 'sub2api' && entry.accountId !== accountId)
+            ));
             next.push(result);
-            return { results: next, error: null };
+            const isCurrentAccount = providerId !== 'sub2api'
+              || useConfigStore.getState().currentProviderId === accountId;
+            return { results: next, error: isCurrentAccount ? null : state.error };
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to fetch quota';
           const fallback: ProviderResult = {
             providerId,
+            accountId,
             providerName: providerId,
             ok: false,
             configured: false,
@@ -210,13 +238,18 @@ export const useQuotaStore = create<QuotaStore>()(
             fetchedAt: Date.now()
           };
           set((state) => {
-            const next = state.results.filter((entry) => entry.providerId !== providerId);
+            const next = state.results.filter((entry) => (
+              entry.providerId !== providerId
+                || (providerId === 'sub2api' && entry.accountId !== accountId)
+            ));
             next.push(fallback);
-            return { results: next, error: message };
+            const isCurrentAccount = providerId !== 'sub2api'
+              || useConfigStore.getState().currentProviderId === accountId;
+            return { results: next, error: isCurrentAccount ? message : state.error };
           });
         } finally {
           set((state) => ({
-            isFetchingProvider: { ...state.isFetchingProvider, [providerId]: false }
+            isFetchingProvider: { ...state.isFetchingProvider, [fetchKey]: false }
           }));
         }
       },

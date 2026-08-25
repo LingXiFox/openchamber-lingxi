@@ -139,3 +139,400 @@ Before creating or updating a pull request, read `CONTRIBUTING.md` and
 current evidence for the final PR HEAD; do not make the reviewer reconstruct
 intent, affected surfaces, applicable guidance, validation, visual behavior,
 or failure and rollback considerations from the diff alone.
+
+## Local Development Storage Boundary
+
+This repository is developed on the dedicated APFS development volume:
+
+`/Volumes/Development`
+
+Repository:
+
+`/Volumes/Development/Projects/projects/openchamber-lingxi`
+
+All large development caches, downloaded build artifacts, package-manager caches, and temporary development dependencies must remain on the Development volume whenever the relevant tool supports a configurable location.
+
+Configured locations:
+
+- Go module cache: `/Volumes/Development/Go/pkg/mod`
+- Go build cache: `/Volumes/Development/Cache/go-build`
+- Bun install cache: `/Volumes/Development/Cache/bun/install`
+- Bun runtime cache: `/Volumes/Development/Cache/bun/runtime`
+- Electron cache: `/Volumes/Development/Cache/electron`
+- electron-builder cache: `/Volumes/Development/Cache/electron-builder`
+- npm cache: `/Volumes/Development/Cache/npm`
+- uv cache: `/Volumes/Development/Cache/uv`
+
+Respect these existing environment variables:
+
+- `GOMODCACHE`
+- `GOCACHE`
+- `BUN_INSTALL_CACHE_DIR`
+- `BUN_RUNTIME_TRANSPILER_CACHE_PATH`
+- `ELECTRON_CACHE`
+- `ELECTRON_BUILDER_CACHE`
+- `UV_CACHE_DIR`
+
+Use `npm config get cache` as the npm cache source of truth.
+
+Do not intentionally recreate development caches at:
+
+- `~/.npm`
+- `~/.bun/install/cache`
+- `~/.cache/uv`
+- `~/.cache/huggingface`
+- `~/Library/Caches/go-build`
+- `~/Library/Caches/electron`
+- `~/Library/Caches/electron-builder`
+
+Do not change cache paths back to `$HOME`, `~/Library`, `/tmp`, or another system-volume location to work around a build problem.
+
+If a command would create a large cache/runtime on the system volume and no safe Development-volume override is known, stop and report it before executing the command.
+
+Normal application configuration, credentials, logs, OpenCode user data, and other small persistent application state are not development caches and should not be relocated without an explicit task requiring it.
+
+## OpenChamber Electron Development
+
+For normal local Electron development, start from the repository root:
+
+`bun run electron:dev`
+
+This is the preferred development-mode entry point.
+
+Use the existing shell environment so Bun, Electron, npm, uv, and Go inherit the Development-volume cache configuration.
+
+Do not manually set:
+
+`OPENCHAMBER_ELECTRON_DEV=1`
+
+when launching a packaged `.app`.
+
+That variable changes resource resolution to development behavior and must not be used as a packaged-app isolation mechanism.
+
+A packaged build and a development instance that share the same OpenChamber/OpenCode data must not be run concurrently.
+
+Before launching another OpenChamber instance that uses the normal user environment, make sure the previous instance has fully exited.
+
+For isolated packaged-app testing, use explicit temporary HOME/XDG/OpenChamber/Electron user-data directories rather than forcing Electron development mode.
+
+## Isolated macOS Packaged-App Validation
+
+When validating a locally built macOS `.app`, do not run it directly against the normal user environment first.
+
+The goal of this procedure is to validate the packaged desktop application while preventing the test build from writing OpenChamber, OpenCode, Electron/Chromium, package-manager, or development cache data into the normal user environment on the macOS system volume.
+
+### 1. Build the local ARM64 packaged app
+
+Run from the repository root:
+
+```bash
+cd /Volumes/Development/Projects/projects/openchamber-lingxi
+
+CSC_IDENTITY_AUTO_DISCOVERY=false \
+bun run --cwd packages/electron package -- \
+  --mac \
+  --arm64 \
+  --dir \
+  --config.mac.notarize=false
+```
+
+Expected output application:
+
+```text
+/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber-Ling_Xi_Fox-Test.app
+```
+
+This is the preferred local packaged build for development validation.
+
+It uses an ad-hoc/local signing path and skips notarization. Do not add notarization merely for local validation unless explicitly requested.
+
+### 2. Use the dedicated isolated runtime
+
+All packaged-app validation state must use:
+
+```text
+/Volumes/Development/Runtime/OpenChamberTest
+```
+
+The isolation layout is:
+
+```text
+/Volumes/Development/Runtime/OpenChamberTest/
+├── home/
+│   ├── .config/
+│   ├── .local/
+│   │   └── share/
+│   ├── .cache/
+│   └── Library/
+├── data/
+└── electron-user-data/
+```
+
+Create the directories if necessary:
+
+```bash
+mkdir -p \
+  /Volumes/Development/Runtime/OpenChamberTest/home/.config \
+  /Volumes/Development/Runtime/OpenChamberTest/home/.local/share \
+  /Volumes/Development/Runtime/OpenChamberTest/home/.cache \
+  /Volumes/Development/Runtime/OpenChamberTest/data \
+  /Volumes/Development/Runtime/OpenChamberTest/electron-user-data
+```
+
+### 3. Launch the packaged app in isolation
+
+Run the packaged executable directly:
+
+```bash
+env \
+  HOME="/Volumes/Development/Runtime/OpenChamberTest/home" \
+  XDG_CONFIG_HOME="/Volumes/Development/Runtime/OpenChamberTest/home/.config" \
+  XDG_DATA_HOME="/Volumes/Development/Runtime/OpenChamberTest/home/.local/share" \
+  XDG_CACHE_HOME="/Volumes/Development/Runtime/OpenChamberTest/home/.cache" \
+  OPENCHAMBER_DATA_DIR="/Volumes/Development/Runtime/OpenChamberTest/data" \
+  OPENCHAMBER_OPENCODE_CWD="/Volumes/Development/Projects/projects/openchamber-lingxi" \
+  "/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber-Ling_Xi_Fox-Test.app/Contents/MacOS/OpenChamber-Ling_Xi_Fox-Test" \
+  --user-data-dir="/Volumes/Development/Runtime/OpenChamberTest/electron-user-data"
+```
+
+The real repository may be used as the OpenCode working directory:
+
+```text
+/Volumes/Development/Projects/projects/openchamber-lingxi
+```
+
+but application state must remain isolated under:
+
+```text
+/Volumes/Development/Runtime/OpenChamberTest
+```
+
+### 4. Critical packaged-mode rule
+
+Never set the following variable when launching a packaged `.app`:
+
+```text
+OPENCHAMBER_ELECTRON_DEV=1
+```
+
+In the Electron main process:
+
+```js
+const isDev =
+  process.env.OPENCHAMBER_ELECTRON_DEV === '1' ||
+  !app.isPackaged;
+```
+
+Packaged resource resolution depends on remaining in packaged mode:
+
+```js
+const resourceRoot = () =>
+  isDev
+    ? path.join(__dirname, 'resources')
+    : process.resourcesPath;
+```
+
+Forcing `OPENCHAMBER_ELECTRON_DEV=1` on a packaged app incorrectly redirects resources toward development paths inside `app.asar`.
+
+This can cause failures such as:
+
+```text
+dist-bundle/resources/web-dist not found
+```
+
+or:
+
+```text
+ERR_UNEXPECTED
+```
+
+even though the correctly packaged resources exist under:
+
+```text
+OpenChamber-Ling_Xi_Fox-Test.app/Contents/Resources/
+```
+
+Therefore:
+
+```text
+Packaged .app
+→ app.isPackaged = true
+→ isDev = false
+→ process.resourcesPath
+→ Contents/Resources
+```
+
+must remain intact.
+
+Do not use `OPENCHAMBER_ELECTRON_DEV=1` as an isolation mechanism.
+
+### 5. Do not fall back to the normal user environment
+
+If the isolated packaged app fails to start:
+
+- Do not remove `HOME`.
+- Do not remove the XDG overrides.
+- Do not remove `OPENCHAMBER_DATA_DIR`.
+- Do not remove `--user-data-dir`.
+- Do not launch it against the normal OpenChamber/OpenCode state merely to see whether that fixes the problem.
+
+Diagnose the actual packaging, resource, runtime, or configuration failure instead.
+
+### 6. Concurrent-instance rule
+
+Do not run a normal-user-environment instance and a development/test instance against the same application data at the same time.
+
+Normal-user-environment instances include:
+
+```text
+/Applications/OpenChamber.app
+```
+
+and the daily-use build of this repository:
+
+```text
+/Applications/OpenChamber-Ling_Xi_Fox.app
+```
+
+Development/test instances launch only through the isolated OpenChamberTest environment (see below) and use the test build:
+
+```text
+/Volumes/Development/Projects/projects/openchamber-lingxi/packages/electron/dist/mac-arm64/OpenChamber-Ling_Xi_Fox-Test.app
+```
+
+Their filenames may differ, but they belong to the same OpenChamber application/data ecosystem.
+
+When using the normal user environment, make sure the previous OpenChamber instance has fully exited before launching another build.
+
+This avoids concurrent access to OpenCode/OpenChamber databases and related state.
+
+### Instance identity
+
+Three builds may coexist and are distinct products at runtime. Never assume which one owns a port or process without checking:
+
+| Build | Role | Data environment |
+|---|---|---|
+| `/Applications/OpenChamber.app` | Official release; lacks this fork's features (e.g. Sub2API quota provider) | Normal user env (`~/.config/openchamber`, `~/.config/opencode`) |
+| `/Applications/OpenChamber-Ling_Xi_Fox.app` | This fork's installed daily-use production build | Normal user env — treat its ports, processes, and data as production |
+| `dist/mac-arm64/OpenChamber-Ling_Xi_Fox-Test.app` (this repository) | Development validation only | Isolated `/Volumes/Development/Runtime/OpenChamberTest` |
+
+Before probing any loopback port or API of a running instance, identify which build owns it: inspect the process command line (`pgrep -fl`, `lsof`) for the binary path and for isolation markers (`--user-data-dir`, `--openchamber-home`). Markers pointing into `/Volumes/Development/Runtime/OpenChamberTest` identify the test instance; anything bound to the normal user environment is production data. A response from an older or official build, such as `Unsupported provider` from a quota endpoint, says nothing about this repository's current implementation state.
+
+### 7. Validation order
+
+Use this order for local macOS desktop work:
+
+```text
+Source changes
+    ↓
+type-check / targeted tests
+    ↓
+bun run build when required
+    ↓
+local ARM64 packaged .app build
+    ↓
+launch with OpenChamberTest isolation
+    ↓
+validate startup and required functionality
+    ↓
+only then consider normal-user-environment testing
+```
+
+Do not skip directly from an unvalidated source change to running a packaged build against the normal user environment.
+
+### 8. Normal Electron development mode
+
+For interactive development with the development server/HMR, use the repository's normal Electron development entry point from the repository root:
+
+```bash
+cd /Volumes/Development/Projects/projects/openchamber-lingxi
+bun run electron:dev
+```
+
+This is separate from packaged-app validation.
+
+Conceptually:
+
+```text
+bun run electron:dev
+→ development mode / HMR
+
+package --mac --arm64 --dir
+→ produces packaged .app
+
+packaged .app + OpenChamberTest environment
+→ isolated packaged-app validation
+```
+
+Do not confuse these three workflows.
+
+### 9. Development-volume cache boundary
+
+The existing development cache configuration must continue to be respected during both development and packaging.
+
+Configured locations include:
+
+```text
+Go module cache
+/Volumes/Development/Go/pkg/mod
+
+Go build cache
+/Volumes/Development/Cache/go-build
+
+Bun install cache
+/Volumes/Development/Cache/bun/install
+
+Bun runtime transpiler cache
+/Volumes/Development/Cache/bun/runtime
+
+Electron cache
+/Volumes/Development/Cache/electron
+
+electron-builder cache
+/Volumes/Development/Cache/electron-builder
+
+npm cache
+/Volumes/Development/Cache/npm
+
+uv cache
+/Volumes/Development/Cache/uv
+```
+
+Respect the configured environment variables:
+
+```text
+GOMODCACHE
+GOCACHE
+BUN_INSTALL_CACHE_DIR
+BUN_RUNTIME_TRANSPILER_CACHE_PATH
+ELECTRON_CACHE
+ELECTRON_BUILDER_CACHE
+UV_CACHE_DIR
+```
+
+Use:
+
+```bash
+npm config get cache
+```
+
+as the source of truth for the npm cache path.
+
+Do not silently redirect these caches back to the system volume.
+
+### 10. Isolation scope
+
+The isolated packaged-app procedure is intended to keep test application state away from the normal:
+
+```text
+~/.config/openchamber
+~/.config/opencode
+~/.local/share/opencode
+~/Library/Application Support/OpenChamber
+```
+
+and related normal Electron/Chromium application state.
+
+Normal macOS system metadata, unified logging, operating-system databases, or unrelated application logs are outside this isolation guarantee.
+
+Do not relocate ordinary macOS preferences, credentials, or unrelated application state merely to satisfy the development-volume policy.
