@@ -14,6 +14,13 @@ import { useGlobalSessionsStore } from '@/stores/useGlobalSessionsStore';
 import { useDeviceInfo } from '@/lib/device';
 import { checkIsGitRepository } from '@/lib/gitApi';
 import {
+  useGitStore,
+  useGitBranchCompare,
+  useGitPatchStacks,
+} from '@/stores/useGitStore';
+import { BranchHealthBadge } from '@/components/views/git/BranchHealthBadge';
+import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
+import {
   getWorktreeSetupCommands,
   getWorktreeSetupWaitEnabled,
   saveWorktreeSetupCommands,
@@ -331,6 +338,21 @@ export const WorktreeSectionContent: React.FC<WorktreeSectionContentProps> = ({ 
     }
   }, [sessionsKey, isGitRepoLocal, projectPath, refreshWorktrees]);
 
+  // Health badges and stack membership come from the per-directory git cache.
+  // This surface is the visible consumer, so it drives a (stale-thresholded)
+  // refresh while mounted; hidden surfaces perform no work.
+  const branchCompare = useGitBranchCompare(projectPath);
+  const patchStacks = useGitPatchStacks(projectPath);
+  const fetchBranchCompare = useGitStore((s) => s.fetchBranchCompare);
+  const fetchPatchStacks = useGitStore((s) => s.fetchPatchStacks);
+  const { git: runtimeGit } = useRuntimeAPIs();
+  const gitRuntimeReady = isGitRepoLocal === true;
+  React.useEffect(() => {
+    if (!gitRuntimeReady || !projectPath || !runtimeGit) return;
+    void fetchBranchCompare(projectPath, runtimeGit);
+    void fetchPatchStacks(projectPath, runtimeGit);
+  }, [gitRuntimeReady, projectPath, runtimeGit, fetchBranchCompare, fetchPatchStacks]);
+
   const setupTooltip = (
     <SettingsInfoHint>
       {t('settings.openchamber.worktrees.setup.tooltipPrefix')}
@@ -451,20 +473,41 @@ export const WorktreeSectionContent: React.FC<WorktreeSectionContentProps> = ({ 
           // The settings panel keeps its narrow control column; the full-page
           // Worktrees surface lets rows use the whole content width.
           <div className={cn('space-y-1', sections === 'all' && PROJECT_SETTINGS_CONTROL_WIDTH)}>
-            {availableWorktrees.map((worktree) => (
+            {availableWorktrees.map((worktree) => {
+              const comparison = worktree.branch && branchCompare
+                ? branchCompare.comparisons.find((row) => row.branch === worktree.branch) ?? null
+                : null;
+              const stackGroup = worktree.branch && patchStacks
+                ? patchStacks.groups.find((group) => group.chains.some((chain) => chain.branch === worktree.branch)) ?? null
+                : null;
+              const stackEntry = stackGroup?.chains.find((chain) => chain.branch === worktree.branch) ?? null;
+              return (
               <div
                 key={worktree.path}
                 className="group flex w-full items-center gap-2 py-1.5"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <p className="typography-meta min-w-0 truncate text-foreground">
+                  <div className={cn('flex min-w-0 items-center gap-2', sections === 'list-only' && 'flex-wrap')}>
+                    <p className={cn('typography-meta min-w-0 text-foreground', sections === 'all' ? 'truncate' : 'break-all')}>
                       {worktree.label || worktree.branch || t('settings.openchamber.worktrees.list.detachedHead')}
                     </p>
+                    {comparison ? <BranchHealthBadge row={comparison} nowMs={Date.now()} /> : null}
                   </div>
-                  <p className="typography-micro truncate text-muted-foreground/60">
+                  <p className={cn('typography-micro text-muted-foreground/60', sections === 'all' ? 'truncate' : 'break-all')}>
                     {formatPathForDisplay(worktree.path, homeDirectory)}
                   </p>
+                  {worktree.branch && stackGroup && stackEntry ? (
+                    <p className={cn('typography-micro text-muted-foreground/60', sections === 'all' ? 'truncate' : 'break-words')}>
+                      {stackEntry.dependsOn
+                        ? t('settings.openchamber.worktrees.list.stackMembershipWithParent', {
+                            group: stackGroup.name || t('gitView.stacks.title'),
+                            parent: stackEntry.dependsOn,
+                          })
+                        : t('settings.openchamber.worktrees.list.stackMembershipSolo', {
+                            group: stackGroup.name || t('gitView.stacks.title'),
+                          })}
+                    </p>
+                  ) : null}
                 </div>
                 <button
                   type="button"
@@ -478,7 +521,8 @@ export const WorktreeSectionContent: React.FC<WorktreeSectionContentProps> = ({ 
                   <Icon name="delete-bin" className="h-4 w-4" />
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </ProjectSettingsSubsection>

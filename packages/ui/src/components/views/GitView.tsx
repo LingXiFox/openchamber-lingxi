@@ -5,6 +5,7 @@ import { useFireworksCelebration } from '@/contexts/FireworksContext';
 import type { GitIdentityProfile, CommitFileEntry, GitStatus } from '@/lib/api/types';
 import { rankByQuery } from '@/lib/search/fuzzySearch';
 import { useGitIdentitiesStore } from '@/stores/useGitIdentitiesStore';
+import { useGraphTraceStore } from '@/stores/useGraphTraceStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useEffectiveDirectory } from '@/hooks/useEffectiveDirectory';
 import { useGitmojiList } from '@/hooks/useGitmojiList';
@@ -15,6 +16,9 @@ import {
   useGitBranches,
   useGitLog,
   useGitIdentity,
+  useGitBranchCompare,
+  useGitPatchStacks,
+  useGitTags,
   useIsGitRepo,
   useGitLoadingStatus,
   useGitLoadingLog,
@@ -22,6 +26,15 @@ import {
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { ScrollShadow } from '@/components/ui/ScrollShadow';
 import { toast } from '@/components/ui';
+import {
+  classifyBranchActivity,
+  classifyBranchBase,
+  classifyBranchTopology,
+} from '@/components/views/git/branchHealth';
+import {
+  pickLatestPrereleaseTag,
+  pickLatestStableTag,
+} from '@/components/views/git/releaseTags';
 import {
   Dialog,
   DialogContent,
@@ -58,6 +71,7 @@ import { ConflictDialog } from './git/ConflictDialog';
 import { StashDialog } from './git/StashDialog';
 import { InProgressOperationBanner } from './git/InProgressOperationBanner';
 import { BranchIntegrationSection, type OperationLogEntry } from './git/BranchIntegrationSection';
+import { BranchStacksSection } from './git/BranchStacksSection';
 import { deriveBaseBranch } from './git/baseBranch';
 import { getFreshestPrStatusForBranch, useGitHubPrStatusStore } from '@/stores/useGitHubPrStatusStore';
 import { createGitIndexMutationQueue, type GitIndexMutationDirection, type GitIndexMutationQueue } from './git/gitIndexMutationQueue';
@@ -269,6 +283,9 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
   const branches = useGitBranches(currentDirectory ?? null);
   const log = useGitLog(currentDirectory ?? null);
   const currentIdentity = useGitIdentity(currentDirectory ?? null);
+  const branchCompare = useGitBranchCompare(currentDirectory ?? null);
+  const patchStacks = useGitPatchStacks(currentDirectory ?? null);
+  const gitTags = useGitTags(currentDirectory ?? null);
   const isLoading = useGitLoadingStatus(currentDirectory ?? null);
   const isLogLoading = useGitLoadingLog(currentDirectory ?? null);
   const {
@@ -626,6 +643,10 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
   const [gitLogDialogMode, setGitLogDialogMode] = React.useState<GitLogDialogMode | null>(null);
 
   const [isUpdateBranchDialogOpen, setIsUpdateBranchDialogOpen] = React.useState(false);
+  const [updateBranchDefaults, setUpdateBranchDefaults] = React.useState<{ operation: 'merge' | 'rebase'; target: string | null }>({
+    operation: 'merge',
+    target: null,
+  });
   const [isIntegrateCommitsDialogOpen, setIsIntegrateCommitsDialogOpen] = React.useState(false);
   const [remotes, setRemotes] = React.useState<GitRemote[]>([]);
   const [removingRemoteName, setRemovingRemoteName] = React.useState<string | null>(null);
@@ -638,6 +659,13 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
   const [graphLogLoading, setGraphLogLoading] = React.useState(false);
   const [graphLogMaxCount, setGraphLogMaxCount] = React.useState(100);
   const [graphLogRefreshToken, setGraphLogRefreshToken] = React.useState(0);
+  const [graphView, setGraphView] = React.useState<'raw' | 'patches'>('raw');
+
+  // Trace mode (graph dialog): when on, clicking a commit traces its provenance
+  // instead of expanding its action row.
+  const [traceModeEnabled, setTraceModeEnabled] = React.useState(false);
+  const [traceResult, setTraceResult] = React.useState<import('@/lib/api/types').GitTraceResponse | null>(null);
+  const [traceLoading, setTraceLoading] = React.useState(false);
 
   // Conflict state persistence key
   const conflictStorageKey = React.useMemo(() => {
@@ -1635,6 +1663,122 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
     return () => { cancelled = true; };
   }, [gitLogDialogMode, currentDirectory, graphLogMaxCount, graphLogRefreshToken, git]);
 
+  // Branch health rows keyed by branch name for selector badges and summaries.
+  const healthByBranch = React.useMemo(() => {
+    if (!branchCompare?.comparisons?.length) return null;
+    return new Map(branchCompare.comparisons.map((row) => [row.branch, row]));
+  }, [branchCompare]);
+
+  const healthSummary = React.useMemo(() => {
+    if (!branchCompare?.comparisons?.length) return null;
+    const nowMs = Date.now();
+    let diverged = 0;
+    let baseStale = 0;
+    let dormant = 0;
+    for (const row of branchCompare.comparisons) {
+      if (classifyBranchTopology(row) === 'diverged') diverged++;
+      else if (classifyBranchBase(row) === 'base-stale') baseStale++;
+      if (classifyBranchActivity(row.lastCommitUnix, nowMs) === 'dormant') dormant++;
+    }
+    return { diverged, baseStale, dormant };
+  }, [branchCompare]);
+
+  const patchMergeBaseHash = React.useMemo(() => {
+    if (!branchCompare || !patchStacks) return null;
+    return branchCompare.base === patchStacks.base
+      ? branchCompare.comparisons.find((row) => row.isCurrent)?.mergeBase ?? null
+      : branchCompare.comparisons.find((row) => row.branch === patchStacks.base)?.mergeBase ?? null;
+  }, [branchCompare, patchStacks]);
+
+  // Release vs snapshot semantics from local tags + the current branch's
+  // position relative to the latest stable tag (from branchCompare).
+  const releaseInfo = React.useMemo<import('./git/HistorySection').HistoryReleaseInfo | null>(() => {
+    if (!gitTags || !gitTags.tags.length) return null;
+    const stable = pickLatestStableTag(gitTags.tags);
+    const prerelease = pickLatestPrereleaseTag(gitTags.tags);
+    if (!stable && !prerelease) return { kind: 'snapshot' };
+    if (!stable) return prerelease ? { kind: 'prerelease', tag: prerelease.name, stableTag: null } : { kind: 'snapshot' };
+
+    // Prerelease only surfaces when it is NEWER than the latest stable.
+    const preIsNewer = prerelease !== null && (prerelease.creatordateUnix ?? 0) > (stable.creatordateUnix ?? 0);
+    if (preIsNewer && prerelease) {
+      return { kind: 'prerelease', tag: prerelease.name, stableTag: stable.name };
+    }
+
+    const currentRow = branchCompare?.comparisons.find((row) => row.isCurrent);
+    return {
+      kind: 'stable',
+      tag: stable.name,
+      aheadFromStable: currentRow?.ahead ?? 0,
+      behindFromStable: currentRow?.behind ?? 0,
+    };
+  }, [gitTags, branchCompare]);
+
+  const setPersistedTraceRoot = useGraphTraceStore((s) => s.setTraceRoot);
+  const clearPersistedTraceRoot = useGraphTraceStore((s) => s.clearTraceRoot);
+
+  const clearTrace = React.useCallback(() => {
+    // User-initiated clear: drop the in-memory trace AND the persisted root.
+    if (currentDirectory) clearPersistedTraceRoot(currentDirectory);
+    setTraceResult(null);
+    setTraceLoading(false);
+  }, [currentDirectory, clearPersistedTraceRoot]);
+
+  // Directory or dialog switches must not keep a stale trace alive. Other
+  // directories' persisted roots are preserved so returning to a directory
+  // restores its provenance highlight.
+  React.useEffect(() => {
+    setTraceResult(null);
+    setTraceLoading(false);
+    setTraceModeEnabled(false);
+    if (gitLogDialogMode !== 'graph') setGraphView('raw');
+  }, [currentDirectory, gitLogDialogMode]);
+
+  // Restore this directory's persisted trace root when the graph dialog opens.
+  // The root is re-traced against current history; a dead root (e.g. rebased
+  // away) clears its persisted entry instead of failing forever.
+  React.useEffect(() => {
+    if (gitLogDialogMode !== 'graph' || !currentDirectory || !git.traceCommit) return;
+    const persistedRoot = useGraphTraceStore.getState().rootsByDirectory[currentDirectory];
+    if (!persistedRoot) return;
+    let cancelled = false;
+    setTraceLoading(true);
+    git.traceCommit(currentDirectory, { hash: persistedRoot })
+      .then((result) => {
+        if (cancelled) return;
+        setTraceResult(result);
+        setTraceModeEnabled(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        useGraphTraceStore.getState().clearTraceRoot(currentDirectory);
+      })
+      .finally(() => {
+        if (!cancelled) setTraceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gitLogDialogMode, currentDirectory, git.traceCommit]);
+
+  const handleGraphToggleTraceRoot = React.useCallback((hash: string) => {
+    if (!currentDirectory || !git.traceCommit) return;
+    setPersistedTraceRoot(currentDirectory, hash);
+    setTraceLoading(true);
+    git.traceCommit(currentDirectory, { hash })
+      .then((result) => setTraceResult(result))
+      .catch((err) => {
+        console.error('Failed to trace commit:', err);
+        toast.error(err instanceof Error ? err.message : 'Failed to trace commit');
+      })
+      .finally(() => setTraceLoading(false));
+  }, [currentDirectory, git.traceCommit, setPersistedTraceRoot]);
+
+  const traceHighlightSet = React.useMemo(
+    () => (traceResult ? new Set(traceResult.ancestors.commits.map((entry) => entry.hash)) : null),
+    [traceResult]
+  );
+
   // Keep these sections stable in layout; individual cards render placeholders when unavailable.
 
   const moveChangePaths = React.useCallback((paths: string[], direction: GitIndexMutationDirection) => {
@@ -1973,6 +2117,14 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
     },
     [currentDirectory, git, status, resolveIntegrationTarget, refreshStatusAndBranches, refreshLog, isUncommittedChangesError, persistConflictState, clearConflictState, addOperationLog, updateLastLog, resetOperationLogs]
   );
+
+  const planRebase = git.planRebase;
+  const loadRebasePlan = React.useCallback((onto: string) => {
+    if (!currentDirectory || !status?.current || !planRebase) {
+      return Promise.reject(new Error('Rebase planning is unavailable'));
+    }
+    return planRebase(currentDirectory, { branch: status.current, onto });
+  }, [currentDirectory, planRebase, status?.current]);
 
   const handleRebase = React.useCallback(
     async (branch: string) => {
@@ -2338,6 +2490,7 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
         localBranches={localBranches}
         remoteBranches={remoteBranches}
         branchInfo={branches?.branches}
+        healthByBranch={healthByBranch}
         syncAction={syncAction}
         remotes={effectiveRemotes}
         onFetch={(remote) => handleSyncAction('fetch', remote)}
@@ -2355,7 +2508,10 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
             onOpenHistory={() => setGitLogDialogMode('history')}
             onOpenGraph={() => setGitLogDialogMode('graph')}
             onOpenStashes={openStashes}
-            onOpenUpdateBranch={canShowBranchWorkflows ? () => setIsUpdateBranchDialogOpen(true) : undefined}
+            onOpenUpdateBranch={canShowBranchWorkflows ? () => {
+              setUpdateBranchDefaults({ operation: 'merge', target: null });
+              setIsUpdateBranchDialogOpen(true);
+            } : undefined}
             onOpenReintegrateCommits={integrateCommitsProps ? () => setIsIntegrateCommitsDialogOpen(true) : undefined}
             pullRequest={prChipStatus?.pr ?? null}
             prChecks={prChipStatus?.checks ?? null}
@@ -2392,6 +2548,15 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
               preventOverscroll
             >
               <div className="flex h-full min-h-0 flex-col gap-3">
+                  <BranchStacksSection
+                    stacks={patchStacks}
+                    healthByBranch={healthByBranch}
+                    currentBranch={currentBranch}
+                    onRebase={canShowBranchWorkflows ? (target) => {
+                      setUpdateBranchDefaults({ operation: 'rebase', target });
+                      setIsUpdateBranchDialogOpen(true);
+                    } : undefined}
+                  />
                   {(changeEntries?.length ?? 0) > 0 ? (
                     <>
                       <div className="min-h-0 flex-1 overflow-hidden">
@@ -2457,9 +2622,11 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
               currentBranch={status?.current}
               localBranches={localBranches}
               remoteBranches={remoteBranches}
-              defaultTargetBranch={updateTargetBranch}
+              defaultTargetBranch={updateBranchDefaults.target ?? updateTargetBranch}
+              defaultOperation={updateBranchDefaults.operation}
               onMerge={handleMerge}
               onRebase={handleRebase}
+              loadRebasePlan={planRebase ? loadRebasePlan : undefined}
               disabled={isBusy}
               isOperating={branchOperation !== null}
               operationLogs={operationLogs}
@@ -2511,35 +2678,107 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
               <DialogTitle>
                 {gitLogDialogMode === 'graph' ? t('gitView.graph.title') : t('gitView.history.title')}
               </DialogTitle>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="mr-6 h-7 shrink-0 gap-1.5 px-2"
-                onClick={() => {
-                  if (gitLogDialogMode === 'graph') {
-                    setGraphLogRefreshToken((token) => token + 1);
-                    return;
-                  }
-                  if (!currentDirectory) return;
-                  void fetchLog(currentDirectory, git, logMaxCountLocal);
-                }}
-                disabled={gitLogDialogMode === 'graph' ? graphLogLoading : isLogLoading}
-                title={t('gitView.history.refresh')}
-                aria-label={t('gitView.history.refresh')}
-              >
-                <Icon
-                  name="refresh"
-                  className={cn(
-                    'size-4',
-                    (gitLogDialogMode === 'graph' ? graphLogLoading : isLogLoading) && 'animate-spin'
-                  )}
-                />
-                {t('gitView.history.refresh')}
-              </Button>
+              <div className="mr-6 flex shrink-0 items-center gap-1">
+                {gitLogDialogMode === 'graph' ? (
+                  <div className="flex items-center rounded-md border border-border/60 p-0.5">
+                    <Button
+                      type="button"
+                      variant={graphView === 'raw' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-6 px-2"
+                      onClick={() => setGraphView('raw')}
+                      aria-pressed={graphView === 'raw'}
+                    >
+                      {t('gitView.graph.raw')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={graphView === 'patches' ? 'secondary' : 'ghost'}
+                      size="sm"
+                      className="h-6 px-2"
+                      onClick={() => setGraphView('patches')}
+                      aria-pressed={graphView === 'patches'}
+                    >
+                      {t('gitView.graph.patches')}
+                    </Button>
+                  </div>
+                ) : null}
+                {gitLogDialogMode === 'graph' && git.traceCommit !== undefined ? (
+                  <Button
+                    type="button"
+                    variant={traceModeEnabled ? 'secondary' : 'ghost'}
+                    size="sm"
+                    className="h-7 gap-1.5 px-2"
+                    onClick={() => {
+                      if (traceModeEnabled) clearTrace();
+                      setTraceModeEnabled(!traceModeEnabled);
+                    }}
+                    aria-pressed={traceModeEnabled}
+                    title={t('gitView.trace.toggle')}
+                  >
+                    <Icon name="route" className="size-4" />
+                    {t('gitView.trace.toggle')}
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1.5 px-2"
+                  onClick={() => {
+                    if (gitLogDialogMode === 'graph') {
+                      setGraphLogRefreshToken((token) => token + 1);
+                      return;
+                    }
+                    if (!currentDirectory) return;
+                    void fetchLog(currentDirectory, git, logMaxCountLocal);
+                  }}
+                  disabled={gitLogDialogMode === 'graph' ? graphLogLoading : isLogLoading}
+                  title={t('gitView.history.refresh')}
+                  aria-label={t('gitView.history.refresh')}
+                >
+                  <Icon
+                    name="refresh"
+                    className={cn(
+                      'size-4',
+                      (gitLogDialogMode === 'graph' ? graphLogLoading : isLogLoading) && 'animate-spin'
+                    )}
+                  />
+                  {t('gitView.history.refresh')}
+                </Button>
+              </div>
             </div>
             <DialogDescription>
-              {t('gitView.history.dialogDescription')}
+              {traceResult ? (
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1 typography-micro text-muted-foreground">
+                  <code className="font-mono text-foreground">{traceResult.hash.slice(0, 8)}</code>
+                  <span>
+                    {traceResult.ancestors.truncated
+                      ? t('gitView.trace.ancestorsTruncated', { count: traceResult.ancestors.total, shown: traceResult.ancestors.commits.length })
+                      : t('gitView.trace.ancestorsCount', { count: traceResult.ancestors.total })}
+                  </span>
+                  {traceResult.containedBy.branches.length > 0 || traceResult.containedBy.tags.length > 0 ? (
+                    <span>
+                      {t('gitView.trace.containedIn', {
+                        refs: [...traceResult.containedBy.branches, ...traceResult.containedBy.tags].join(', '),
+                      })}
+                    </span>
+                  ) : (
+                    <span>{t('gitView.trace.notContained')}</span>
+                  )}
+                  {traceResult.isAncestorOfHead ? <span>{t('gitView.trace.inHead')}</span> : null}
+                  {traceLoading ? <span>{t('gitView.trace.loading')}</span> : null}
+                  <button
+                    type="button"
+                    className="underline hover:text-foreground"
+                    onClick={clearTrace}
+                  >
+                    {t('gitView.trace.clear')}
+                  </button>
+                </span>
+              ) : (
+                t('gitView.history.dialogDescription')
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 min-h-0">
@@ -2558,8 +2797,16 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
               showHeader={false}
               contentMaxHeightClassName="h-full max-h-none"
               branchDivider={gitLogDialogMode === 'graph' ? null : historyBranchDivider}
+              healthSummary={healthSummary}
+              releaseInfo={releaseInfo}
+              traceActive={traceModeEnabled && gitLogDialogMode === 'graph'}
+              onSetTraceRoot={handleGraphToggleTraceRoot}
+              highlightCommits={traceHighlightSet}
               onConflict={gitLogDialogMode === 'graph' ? handleGraphConflict : undefined}
               onActionSuccess={gitLogDialogMode === 'graph' ? handleGraphActionSuccess : undefined}
+              graphView={graphView}
+              patchStacks={patchStacks}
+              patchMergeBaseHash={patchMergeBaseHash}
             />
           </div>
         </DialogContent>

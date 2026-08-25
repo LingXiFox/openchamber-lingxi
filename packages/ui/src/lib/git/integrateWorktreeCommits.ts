@@ -1,4 +1,5 @@
 import { runtimeFetch } from '@/lib/runtime-fetch';
+import type { GitMergePrecheckResponse } from '@/lib/api/types';
 
 export type IntegratePlan = {
   repoRoot: string;
@@ -50,6 +51,27 @@ export async function computeIntegratePlan(args: {
   targetBranch: string;
 }): Promise<IntegratePlan> {
   return postIntegrate<IntegratePlan>('plan', args);
+}
+
+/**
+ * Read-only conflict precheck for the first commit of a cherry-pick sequence.
+ * Deliberately partial: it says nothing about the remaining sequence steps.
+ */
+export async function precheckIntegrationFirstStep(args: {
+  repoRoot: string;
+  source: string;
+  target: string;
+}): Promise<GitMergePrecheckResponse> {
+  const response = await runtimeFetch('/api/git/merge/precheck', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directory: args.repoRoot, source: args.source, target: args.target }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw new Error(payload?.error || `Git merge precheck request failed: ${response.statusText}`);
+  }
+  return response.json();
 }
 
 export async function getIntegrateConflictDetails(tmpDir: string): Promise<IntegrateConflictDetails> {

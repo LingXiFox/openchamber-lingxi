@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { assignLanes } from './gitGraph';
+import { assignLanes, projectPatchGraph } from './gitGraph';
 import type { GitLogEntry } from '@/lib/api/types';
 
 function makeCommit(hash: string, parents: string[], refs = ''): GitLogEntry {
@@ -153,6 +153,35 @@ describe('assignLanes', () => {
     expect(passing.length).toBeGreaterThan(0);
   });
 
+  test('keeps real edge identity while a trace path passes an unrelated commit', () => {
+    const commits = [
+      makeCommit('selected', ['base']),
+      makeCommit('sibling', ['base']),
+      makeCommit('base', []),
+    ];
+    const result = assignLanes(commits);
+    const siblingRow = result.find((r) => r.commit.hash === 'sibling')!;
+    const passing = siblingRow.connectors.find((connector) => connector.type === 'passing')!;
+    const siblingEdge = siblingRow.connectors.find((connector) => connector.type === 'bottom-stub')!;
+
+    expect(passing.topEdge).toEqual({ childHash: 'selected', parentHash: 'base' });
+    expect(passing.bottomEdge).toEqual(passing.topEdge);
+    expect(siblingEdge.bottomEdge).toEqual({ childHash: 'sibling', parentHash: 'base' });
+  });
+
+  test('keeps incoming and outgoing edge identities separate at a traced commit', () => {
+    const result = assignLanes([
+      makeCommit('child', ['middle']),
+      makeCommit('middle', ['base']),
+      makeCommit('base', []),
+    ]);
+    const middle = result.find((r) => r.commit.hash === 'middle')!;
+    const connector = middle.connectors.find((segment) => segment.type === 'commit-lane')!;
+
+    expect(connector.topEdge).toEqual({ childHash: 'child', parentHash: 'middle' });
+    expect(connector.bottomEdge).toEqual({ childHash: 'middle', parentHash: 'base' });
+  });
+
   test('produces a bottom-stub connector when a new branch starts', () => {
     const commits = [
       makeCommit('c', ['a']),
@@ -165,5 +194,101 @@ describe('assignLanes', () => {
     const cResult = result.find((r) => r.commit.hash === 'c')!;
     const bottomStub = cResult.connectors.find((c) => c.type === 'bottom-stub');
     expect(bottomStub).toBeTruthy();
+  });
+});
+
+describe('projectPatchGraph', () => {
+  test('collapses adjacent same-author sync noise', () => {
+    const commits = [
+      makeCommit('c', ['b']),
+      makeCommit('b', ['a']),
+      makeCommit('a', []),
+    ];
+    commits[0].message = 'Sync generated files';
+    commits[1].message = 'Merge remote-tracking branch origin/main';
+
+    const result = projectPatchGraph(commits);
+
+    expect(result[0].kind).toBe('sync');
+    expect(result[0].commits.map((commit) => commit.hash)).toEqual(['c', 'b']);
+    expect(result[0].entry.parents).toEqual(['a']);
+  });
+
+  test('collapses a directly linked stack tip chain', () => {
+    const commits = [
+      makeCommit('c', ['b'], 'feat/c'),
+      makeCommit('b', ['a'], 'feat/b'),
+      makeCommit('a', ['main'], 'feat/a'),
+      makeCommit('main', []),
+    ];
+    const result = projectPatchGraph(commits, {
+      mergeBaseHash: 'a',
+      stacks: {
+        base: 'main',
+        groups: [{
+          id: 'stack-1',
+          name: 'feature',
+          source: 'inferred',
+          chains: [
+            { branch: 'feat/a', dependsOn: null },
+            { branch: 'feat/b', dependsOn: 'feat/a' },
+            { branch: 'feat/c', dependsOn: 'feat/b' },
+          ],
+        }],
+        ungrouped: [],
+        truncated: false,
+      },
+    });
+
+    expect(result[0].kind).toBe('stack');
+    expect(result[0].stackName).toBe('feature');
+    expect(result[0].commits.map((commit) => commit.hash)).toEqual(['c', 'b']);
+    expect(result[0].entry.parents).toEqual(['a']);
+    expect(result[1].anchors).toEqual(['merge-base']);
+  });
+
+  test('preserves sibling branches when stack metadata contradicts the DAG', () => {
+    const commits = [
+      makeCommit('c', ['main'], 'feat/c'),
+      makeCommit('b', ['main'], 'feat/b'),
+      makeCommit('a', ['main'], 'feat/a'),
+      makeCommit('main', []),
+    ];
+    const result = projectPatchGraph(commits, {
+      stacks: {
+        base: 'main',
+        groups: [{
+          id: 'stack-1',
+          source: 'config',
+          chains: [
+            { branch: 'feat/a', dependsOn: null },
+            { branch: 'feat/b', dependsOn: 'feat/a' },
+            { branch: 'feat/c', dependsOn: 'feat/b' },
+          ],
+        }],
+        ungrouped: [],
+        truncated: false,
+      },
+    });
+
+    expect(result.map((node) => node.entry.hash)).toEqual(['c', 'b', 'a', 'main']);
+    expect(result.slice(0, 3).every((node) => node.entry.parents[0] === 'main')).toBe(true);
+    expect(new Set(assignLanes(commits).slice(0, 3).map((node) => node.lane)).size).toBe(3);
+    const laned = assignLanes(result.map((node) => node.entry));
+    expect(new Set(laned.slice(0, 3).map((node) => node.lane)).size).toBe(3);
+  });
+
+  test('keeps merge-base and release anchors visible', () => {
+    const commits = [
+      makeCommit('b', ['a']),
+      makeCommit('a', [], 'tag: v1.0.0'),
+    ];
+    commits[0].message = 'Sync generated files';
+    commits[1].message = 'Sync release files';
+
+    const result = projectPatchGraph(commits, { mergeBaseHash: 'a', releaseRef: 'v1.0.0' });
+
+    expect(result).toHaveLength(2);
+    expect(result[1].anchors).toEqual(['merge-base', 'release']);
   });
 });

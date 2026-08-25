@@ -15,9 +15,9 @@ import { Button } from '@/components/ui/button';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Icon } from "@/components/icon/Icon";
 import { HistoryCommitRow } from './HistoryCommitRow';
-import type { GitLogEntry, CommitFileEntry } from '@/lib/api/types';
+import type { GitLogEntry, CommitFileEntry, GitPatchStacksResponse } from '@/lib/api/types';
 import { useI18n } from '@/lib/i18n';
-import { assignLanes } from './gitGraph';
+import { assignLanes, projectPatchGraph } from './gitGraph';
 import type { LanedCommit } from './gitGraph';
 
 const LOG_SIZE_OPTIONS = [
@@ -25,6 +25,18 @@ const LOG_SIZE_OPTIONS = [
   { labelKey: 'gitView.history.logSize50', value: 50 },
   { labelKey: 'gitView.history.logSize100', value: 100 },
 ];
+
+interface HistoryHealthSummary {
+  diverged: number;
+  baseStale: number;
+  dormant: number;
+}
+
+export type HistoryReleaseInfo =
+  | { kind: 'stable'; tag: string; aheadFromStable: number; behindFromStable: number }
+  | { kind: 'prerelease'; tag: string; stableTag: string | null }
+  | { kind: 'snapshot' }
+  | { kind: 'none' };
 
 interface HistorySectionProps {
   mode?: 'history' | 'graph';
@@ -45,8 +57,18 @@ interface HistorySectionProps {
     branchName: string;
     direction: 'up' | 'down';
   } | null;
+  healthSummary?: HistoryHealthSummary | null;
+  releaseInfo?: HistoryReleaseInfo | null;
+  /** Trace mode: clicks set a trace root instead of expanding the row. */
+  traceActive?: boolean;
+  onSetTraceRoot?: (hash: string) => void;
+  /** Hashes on the traced path; null = no trace selection yet. */
+  highlightCommits?: Set<string> | null;
   onConflict?: (result: { conflict: boolean; conflictFiles?: string[]; operation: 'cherry-pick' | 'revert' | 'merge' | 'rebase' }) => void;
   onActionSuccess?: () => void;
+  graphView?: 'raw' | 'patches';
+  patchStacks?: GitPatchStacksResponse | null;
+  patchMergeBaseHash?: string | null;
 }
 
 export const HistorySection: React.FC<HistorySectionProps> = ({
@@ -64,16 +86,37 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
   showHeader = true,
   contentMaxHeightClassName = 'max-h-[50vh]',
   branchDivider = null,
+  healthSummary = null,
+  releaseInfo = null,
+  traceActive = false,
+  onSetTraceRoot,
+  highlightCommits = null,
   onConflict,
   onActionSuccess,
+  graphView = 'raw',
+  patchStacks = null,
+  patchMergeBaseHash = null,
 }) => {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = React.useState(true);
   const isGraphMode = mode === 'graph';
+  const [expandedPatchNodes, setExpandedPatchNodes] = React.useState<Set<string>>(new Set());
+  const releaseRef = releaseInfo?.kind === 'stable' || releaseInfo?.kind === 'prerelease' ? releaseInfo.tag : null;
+  const patchNodes = React.useMemo(
+    () => isGraphMode && graphView === 'patches' && log
+      ? projectPatchGraph(log.all, { stacks: patchStacks, mergeBaseHash: patchMergeBaseHash, releaseRef })
+      : null,
+    [graphView, isGraphMode, log, patchMergeBaseHash, patchStacks, releaseRef]
+  );
+  const displayedEntries = patchNodes ? patchNodes.map((node) => node.entry) : log?.all ?? [];
+  const patchNodeByHash = React.useMemo(
+    () => new Map((patchNodes ?? []).map((node) => [node.entry.hash, node])),
+    [patchNodes]
+  );
 
   const laned: LanedCommit[] = React.useMemo(
-    () => (isGraphMode && log ? assignLanes(log.all) : []),
-    [isGraphMode, log]
+    () => (isGraphMode ? assignLanes(displayedEntries) : []),
+    [displayedEntries, isGraphMode]
   );
 
   const maxLanes = React.useMemo(
@@ -111,23 +154,61 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
 
   const renderCommitList = (entries: GitLogEntry[]) => (
     <ul className="divide-y divide-border/60">
-      {entries.map((entry) => (
-        <HistoryCommitRow
-          key={entry.hash}
-          entry={entry}
-          mode={mode}
-          laned={isGraphMode ? lanedByHash.get(entry.hash) : undefined}
-          totalLanes={isGraphMode ? maxLanes : undefined}
-          isExpanded={expandedCommitHashes.has(entry.hash)}
-          onToggle={() => onToggleCommit(entry.hash)}
-          files={commitFilesMap.get(entry.hash) ?? []}
-          isLoadingFiles={loadingCommitHashes.has(entry.hash)}
-          onCopyHash={onCopyHash}
-          directory={directory}
-          onConflict={onConflict}
-          onActionSuccess={onActionSuccess}
-        />
-      ))}
+      {entries.map((entry) => {
+        const semanticNode = patchNodeByHash.get(entry.hash);
+        const isCompound = (semanticNode?.commits.length ?? 0) > 1;
+        const compoundExpanded = isCompound && expandedPatchNodes.has(entry.hash);
+        const traceHighlighted = semanticNode && highlightCommits
+          ? semanticNode.commits.some((commit) => highlightCommits.has(commit.hash))
+          : highlightCommits?.has(entry.hash);
+        return (
+          <React.Fragment key={entry.hash}>
+            <HistoryCommitRow
+              entry={entry}
+              mode={mode}
+              laned={isGraphMode ? lanedByHash.get(entry.hash) : undefined}
+              totalLanes={isGraphMode ? maxLanes : undefined}
+              isExpanded={isCompound ? false : expandedCommitHashes.has(entry.hash)}
+              onToggle={() => {
+                if (!isCompound) {
+                  onToggleCommit(entry.hash);
+                  return;
+                }
+                setExpandedPatchNodes((current) => {
+                  const next = new Set(current);
+                  if (next.has(entry.hash)) next.delete(entry.hash);
+                  else next.add(entry.hash);
+                  return next;
+                });
+              }}
+              files={commitFilesMap.get(entry.hash) ?? []}
+              isLoadingFiles={loadingCommitHashes.has(entry.hash)}
+              onCopyHash={onCopyHash}
+              directory={directory}
+              traceActive={traceActive && isGraphMode}
+              onSetTraceRoot={onSetTraceRoot}
+              isTraceHighlighted={highlightCommits ? traceHighlighted : undefined}
+              traceCommits={highlightCommits}
+              onConflict={onConflict}
+              onActionSuccess={onActionSuccess}
+              semanticNode={semanticNode}
+            />
+            {compoundExpanded && semanticNode ? (
+              <li className="border-t border-border/40 bg-muted/20 px-10 py-2">
+                <ul className="space-y-1.5">
+                  {semanticNode.commits.map((commit) => (
+                    <li key={commit.hash} className="flex min-w-0 items-center gap-2 typography-micro">
+                      <code className="shrink-0 font-mono text-muted-foreground">{commit.hash.slice(0, 8)}</code>
+                      <span className="truncate text-foreground">{commit.message}</span>
+                      <span className="ml-auto shrink-0 text-muted-foreground">{commit.author_name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ) : null}
+          </React.Fragment>
+        );
+      })}
     </ul>
   );
 
@@ -155,7 +236,7 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
 
   const content = (
     <ScrollableOverlay outerClassName={`min-h-0 ${contentMaxHeightClassName}`} className="h-full w-full">
-      {log.all.length === 0 ? (
+      {displayedEntries.length === 0 ? (
         <div className="flex h-full items-center justify-center p-4">
           <p className="typography-ui-label text-muted-foreground">
             {t('gitView.history.noCommits')}
@@ -189,7 +270,7 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
         </>
       ) : (
         <>
-          {renderCommitList(log.all)}
+          {renderCommitList(displayedEntries)}
           {loadMoreButton}
         </>
       )}
@@ -214,7 +295,32 @@ export const HistorySection: React.FC<HistorySectionProps> = ({
       className="rounded-xl border border-border/60 bg-background/70 overflow-hidden"
     >
       <CollapsibleTrigger className="flex w-full items-center justify-between px-3 h-10 hover:bg-transparent">
-        <h3 className="typography-ui-header font-semibold text-foreground">{t('gitView.history.title')}</h3>
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h3 className="typography-ui-header font-semibold text-foreground">{t('gitView.history.title')}</h3>
+          {releaseInfo ? (
+            <span className={`typography-micro truncate ${releaseInfo.kind === 'prerelease' ? 'text-status-warning' : 'text-muted-foreground'}`}>
+              {releaseInfo.kind === 'stable'
+                ? t('gitView.release.stableLine', {
+                    tag: releaseInfo.tag,
+                    ahead: releaseInfo.aheadFromStable,
+                    behind: releaseInfo.behindFromStable,
+                  })
+                : releaseInfo.kind === 'prerelease'
+                  ? t(releaseInfo.stableTag ? 'gitView.release.prereleaseWithStable' : 'gitView.release.prereleaseLine', {
+                      tag: releaseInfo.tag,
+                      stableTag: releaseInfo.stableTag ?? '',
+                    })
+                  : releaseInfo.kind === 'snapshot'
+                    ? t('gitView.release.snapshot')
+                    : null}
+            </span>
+          ) : null}
+          {healthSummary && (healthSummary.diverged > 0 || healthSummary.baseStale > 0 || healthSummary.dormant > 0) ? (
+            <span className="typography-micro shrink-0 text-muted-foreground">
+              {t('gitView.health.summary', { ...healthSummary })}
+            </span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           {isOpen && (
             <div

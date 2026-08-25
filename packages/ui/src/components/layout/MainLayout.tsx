@@ -168,9 +168,13 @@ export const MainLayout: React.FC = () => {
                                             )}
                                             <ErrorBoundary><ScheduledTasksDialog /></ErrorBoundary>
                                             <ErrorBoundary><ArchiveView /></ErrorBoundary>
-                                            <ErrorBoundary><WorktreesView /></ErrorBoundary>
                                         </main>
                                         <ContextPanel />
+                                        {worktreesPageProjectId ? (
+                                            <div className="absolute inset-0 z-30 bg-background">
+                                                <ErrorBoundary><WorktreesView /></ErrorBoundary>
+                                            </div>
+                                        ) : null}
                                     </div>
                                 </div>
                             </div>

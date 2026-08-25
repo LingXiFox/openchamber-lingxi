@@ -16,9 +16,10 @@ import {
 } from '@/components/ui/command';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icon } from "@/components/icon/Icon";
-import type { GitRemote } from '@/lib/api/types';
+import type { GitBranchComparison, GitRemote } from '@/lib/api/types';
 import { rankByQuery } from '@/lib/search/fuzzySearch';
 import { useI18n } from '@/lib/i18n';
+import { classifyBranchActivity, classifyBranchBase, classifyBranchTopology, pickBranchHealthBadge } from './branchHealth';
 
 interface BranchInfo {
   ahead?: number;
@@ -34,7 +35,26 @@ interface BranchSelectorProps {
   onCreate: (name: string, remote?: GitRemote) => Promise<void>;
   remotes?: GitRemote[];
   disabled?: boolean;
+  healthByBranch?: Map<string, GitBranchComparison> | null;
 }
+
+const HEALTH_BADGE_COLOR_CLASS = {
+  diverged: 'text-status-warning',
+  'base-stale': 'text-status-error',
+  behind: 'text-status-info',
+  unrelated: 'text-muted-foreground',
+  merged: 'text-status-success',
+  dormant: 'text-muted-foreground',
+} as const;
+
+const HEALTH_BADGE_KEY = {
+  diverged: 'gitView.health.diverged',
+  'base-stale': 'gitView.health.baseStale',
+  behind: 'gitView.health.behind',
+  unrelated: 'gitView.health.unrelated',
+  merged: 'gitView.health.merged',
+  dormant: 'gitView.health.dormant',
+} as const;
 
 const sanitizeBranchNameInput = (value: string): string => {
   return value
@@ -58,8 +78,26 @@ export const BranchSelector: React.FC<BranchSelectorProps> = ({
   onCreate,
   remotes = [],
   disabled = false,
+  healthByBranch = null,
 }) => {
   const { t } = useI18n();
+  const nowMs = Date.now();
+
+  const healthBadgeFor = React.useCallback((branch: string) => {
+    const row = healthByBranch?.get(branch);
+    if (!row) return null;
+    const badge = pickBranchHealthBadge(
+      classifyBranchTopology(row),
+      classifyBranchBase(row),
+      classifyBranchActivity(row.lastCommitUnix, nowMs)
+    );
+    if (!badge) return null;
+    return {
+      label: t(HEALTH_BADGE_KEY[badge.state]),
+      className: HEALTH_BADGE_COLOR_CLASS[badge.state],
+    };
+  }, [healthByBranch, nowMs, t]);
+
   const [isOpen, setIsOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [showCreate, setShowCreate] = React.useState(false);
@@ -289,27 +327,35 @@ export const BranchSelector: React.FC<BranchSelectorProps> = ({
             <CommandSeparator />
 
             <CommandGroup heading={t('gitView.branch.localBranches')}>
-              {filteredLocal.map((branch) => (
-                <CommandItem
-                  key={`local-${branch}`}
-                  onSelect={() => handleCheckout(branch)}
-                >
-                  <span className="flex flex-1 flex-col">
-                    <span className="typography-ui-label text-foreground">
-                      {branch}
+              {filteredLocal.map((branch) => {
+                const healthBadge = healthBadgeFor(branch);
+                return (
+                  <CommandItem
+                    key={`local-${branch}`}
+                    onSelect={() => handleCheckout(branch)}
+                  >
+                    <span className="flex flex-1 flex-col">
+                      <span className="typography-ui-label text-foreground">
+                        {branch}
+                      </span>
+                      {(branchInfo?.[branch]?.ahead || branchInfo?.[branch]?.behind) && (
+                        <span className="typography-micro text-muted-foreground">
+                          {branchInfo[branch].ahead || 0} ahead ·{' '}
+                          {branchInfo[branch].behind || 0} behind
+                        </span>
+                      )}
                     </span>
-                    {(branchInfo?.[branch]?.ahead || branchInfo?.[branch]?.behind) && (
-                      <span className="typography-micro text-muted-foreground">
-                        {branchInfo[branch].ahead || 0} ahead ·{' '}
-                        {branchInfo[branch].behind || 0} behind
+                    {healthBadge && currentBranch !== branch && (
+                      <span className={`typography-micro shrink-0 ${healthBadge.className}`}>
+                        {healthBadge.label}
                       </span>
                     )}
-                  </span>
-                  {currentBranch === branch && (
-                    <span className="typography-micro text-primary">{t('gitView.branch.currentBadge')}</span>
-                  )}
-                </CommandItem>
-              ))}
+                    {currentBranch === branch && (
+                      <span className="typography-micro text-primary">{t('gitView.branch.currentBadge')}</span>
+                    )}
+                  </CommandItem>
+                );
+              })}
               {filteredLocal.length === 0 && (
                 <CommandItem disabled className="justify-center">
                   <span className="typography-meta text-muted-foreground">

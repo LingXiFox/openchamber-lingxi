@@ -1070,6 +1070,20 @@ export async function abortRebase(directory: string): Promise<{ success: boolean
   return gitHttp.abortRebase(directory);
 }
 
+/**
+ * Read-only merge conflict precheck. Returns null when the active runtime
+ * does not expose the capability (VS Code bridge), which callers must render
+ * as "no precheck line", never as a clean or failed result.
+ */
+export async function precheckMerge(
+  directory: string,
+  options: { source: string; target: string }
+): Promise<import('./api/types').GitMergePrecheckResponse | null> {
+  const runtime = getRuntimeGit();
+  if (runtime?.precheckMerge) return runtime.precheckMerge(directory, options);
+  return null;
+}
+
 export async function merge(
   directory: string,
   options: { branch: string }

@@ -39,11 +39,20 @@ The following functions are exported and used by the web server:
 
 ### Branch Operations
 - `getBranches(directory)`: Get list of local and remote branches (filtered to active remote branches).
+- `compareBranches(directory, options)`: Compare every local branch against a base ref (explicit `options.base`, else the current branch, else origin's default). Reads only local refs (`for-each-ref` + `merge-base` + `rev-list --left-right --count`) — never touches the network, so an offline remote cannot erase health data. Returns `{ base, current, comparisons: [{branch, tip, ahead, behind, mergeBase, lastCommitUnix, isBase, isCurrent}], truncated }`; comparisons cap at 30 branches with `truncated: true`.
+- `getPatchStacks(directory, options)`: Infer direct parent Patch dependencies from local branch-tip ancestry, using `compareBranches` for the branch snapshot and transitive reduction to remove ancestor-closure edges. Repo-root `.openchamber-stacks.json` groups (`{"stacks":[{"name":"auth","branches":[...]}]}`) override inference for listed branches in parent-to-child order. Shared name suffixes form display-only `prefix` groups and never create dependency edges. Exposed as `GET /api/git/stacks`.
 - `createBranch(directory, branchName, options)`: Create and checkout a new branch.
 - `checkoutBranch(directory, branchName)`: Checkout an existing branch.
 - `deleteBranch(directory, branch, options)`: Delete a branch (supports force flag).
 - `renameBranch(directory, oldName, newName)`: Rename a branch and preserve upstream tracking.
 - `getRemotes(directory)`: Get list of configured remotes.
+
+### Tag and Trace Operations
+- `getTags(directory)`: List all tags newest-first via `for-each-ref refs/tags --sort=-creatordate`. Returns `{ tags: [{name, hash, creatordateUnix, objectType}] }`; `objectType` distinguishes lightweight (`commit`) from annotated (`tag`) entries. Release-vs-snapshot classification itself lives in shared UI (`releaseTags.ts`).
+- `traceCommit(directory, { hash, limit })`: Provenance trace for one commit in a single read-only call: ancestor set capped by `limit` (default 300) with untruncated `total`; `containedBy.branches/tags` listing refs whose history reaches the commit (deliberately NOT a full descendants walk); `mergeBaseWithHead` and `isAncestorOfHead` for HEAD relation. Exposed as `POST /api/git/graph/trace`.
+
+### Git subprocess timeouts
+`runGitCommand`/`runGitCommandOrThrow` accept `{ timeoutMs }`. Tiers live in `GIT_COMMAND_TIMEOUTS`: `localRead` (20s), `mutation` (120s), `network` (300s). New commands must pick the matching tier explicitly; there is deliberately no single global timeout. simple-git (`git.raw`) calls do not yet carry timeouts — existing debt, not an invitation to skip tiers on new execFile-path code.
 
 ### Worktree Operations
 - `getWorktrees(directory)`: List all git worktrees for a repository.
@@ -74,6 +83,8 @@ bootstrap, tracking is left unset rather than writing `branch.*.remote` /
 - `getCommitFileDiff(directory, hash, filePath, isBinary)`: Get before/after content for a specific file in a commit. Returns `{ original, modified, isBinary }`. Runs `git show <hash>^:<path>` and `git show <hash>:<path>` in parallel; returns empty strings on failure (added/deleted/root-commit edge cases).
 
 ### Merge and Rebase Operations
+- `planRebase(directory, options)`: Read-only impact plan for rebasing one branch onto another. Returns the branch's unique commits, recursively affected downstream Patch branches from `getPatchStacks`, and bounded warning codes for downstream history rewrites, dirty worktrees, empty rebase sets, and unrelated histories. Exposed as `POST /api/git/rebase/plan`; it never checks out or rewrites a branch.
+- `precheckMerge(directory, { source, target })`: Read-only conflict precheck for merging `source` into `target` via one merge-tree command — neither index nor working tree is touched. Engine probe (`git --version`, cached per process): git ≥ 2.38 uses machine-readable `merge-tree --write-tree --name-only`; older git falls back to the three-argument form whose conflict blocks are parsed by `parseLegacyMergeTreeConflicts` (exported for test injection; only blocks with conflict-marker lines count, so auto-resolvable "added in remote" rows are excluded). Returns `{ clean, conflictedFiles, engine }`. Rebase checks reuse it with `target=onto` as a first-order approximation. Exposed as `POST /api/git/merge/precheck`.
 - `rebase(directory, options)`: Start a rebase onto a target branch.
 - `abortRebase(directory)`: Abort an in-progress rebase.
 - `continueRebase(directory)`: Continue a rebase after conflict resolution.
@@ -190,3 +201,4 @@ The following functions are internal helpers used by exported functions:
 ### Testing
 - Run `bun run type-check`, `bun run lint`, and `bun run build` before finalizing changes.
 - Consider edge cases: non-Git directories, missing remotes, conflict states, concurrent worktree operations.
+- Destructive Git tests must run inside the L1 fixture harness (`testing/gitFixture.js`): `createGitFixture()` builds an offline working repo + origin/upstream bare remotes with a self-contained identity, and scenario builders (`buildStalePatchOnOldRelease`, `buildStackChain`, `buildIndependentPatches`, `buildDivergedBranch`, `buildConflictingBranches`) assemble deterministic topologies. Never target a real workspace as a destructive test destination; extend the shared builders instead of re-creating repos per test file.

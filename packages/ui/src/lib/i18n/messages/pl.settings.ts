@@ -1246,6 +1246,8 @@ export const settingsDict = {
   'settings.openchamber.visual.section.userMessageRendering': 'Renderowanie wiadomości użytkownika',
   'settings.openchamber.visual.section.userMessageRenderingAria': 'Tryb renderowania wiadomości użytkownika',
   'settings.openchamber.worktrees.list.deleteWorktreeAria': 'Usuń worktree {name}',
+  'settings.openchamber.worktrees.list.stackMembershipWithParent': '{group} · ułożone na {parent}',
+  'settings.openchamber.worktrees.list.stackMembershipSolo': '{group}',
   'settings.openchamber.worktrees.list.detachedHead': 'Odłączony HEAD',
   'settings.openchamber.worktrees.list.empty': 'Nie znaleziono worktree dla tego projektu',
   'settings.openchamber.worktrees.list.loading': 'Ładowanie worktree...',

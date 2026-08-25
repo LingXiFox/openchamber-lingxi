@@ -1368,6 +1368,8 @@ export const settingsDict = {
   "settings.openchamber.worktrees.list.empty": "Для цього проєкту не знайдено worktree",
   "settings.openchamber.worktrees.list.detachedHead": "Відокремлено HEAD",
   "settings.openchamber.worktrees.list.deleteWorktreeAria": "Видалити worktree {name}",
+  "settings.openchamber.worktrees.list.stackMembershipWithParent": "{group} · нашаровано на {parent}",
+  "settings.openchamber.worktrees.list.stackMembershipSolo": "{group}",
   "settings.agents.modelSelector.title": "Виберіть модель",
   "settings.agents.modelSelector.searchPlaceholder": "Пошук моделей",
   "settings.agents.modelSelector.selectPlaceholder": "Виберіть модель...",

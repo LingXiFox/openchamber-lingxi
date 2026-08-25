@@ -1401,6 +1401,8 @@ export const settingsDict = {
   'settings.openchamber.worktrees.list.empty': 'このプロジェクトに Worktree は見つかりません',
   'settings.openchamber.worktrees.list.detachedHead': '分離 HEAD',
   'settings.openchamber.worktrees.list.deleteWorktreeAria': 'Worktree {name} を削除',
+  'settings.openchamber.worktrees.list.stackMembershipWithParent': '{group} · {parent} の上に積み上げ',
+  'settings.openchamber.worktrees.list.stackMembershipSolo': '{group}',
   'settings.agents.modelSelector.title': 'モデルを選択',
   'settings.agents.modelSelector.searchPlaceholder': 'モデルを検索',
   'settings.agents.modelSelector.selectPlaceholder': 'モデルを選択...',

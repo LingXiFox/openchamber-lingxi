@@ -1368,6 +1368,8 @@ export const settingsDict = {
   "settings.openchamber.worktrees.list.empty": "Nenhum worktree encontrado para este projeto",
   "settings.openchamber.worktrees.list.detachedHead": "HEAD desvinculado",
   "settings.openchamber.worktrees.list.deleteWorktreeAria": "Excluir worktree {name}",
+  "settings.openchamber.worktrees.list.stackMembershipWithParent": "{group} · empilhado em {parent}",
+  "settings.openchamber.worktrees.list.stackMembershipSolo": "{group}",
   "settings.agents.modelSelector.title": "Selecionar modelo",
   "settings.agents.modelSelector.searchPlaceholder": "Pesquisar modelos",
   "settings.agents.modelSelector.selectPlaceholder": "Selecionar modelo...",
