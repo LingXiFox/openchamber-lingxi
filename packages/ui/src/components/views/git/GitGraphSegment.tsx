@@ -96,7 +96,7 @@ export const GitGraphSegment: React.FC<GitGraphSegmentProps> = ({
     for (const seg of sorted) {
       const x1 = seg.fromLane * LANE_WIDTH + LANE_WIDTH / 2;
       const x2 = seg.toLane * LANE_WIDTH + LANE_WIDTH / 2;
-      let lineAlpha = seg.type === 'passing'
+      const lineAlpha = seg.type === 'passing'
         ? 0.72
         : seg.type === 'branch-out' || seg.type === 'merge-in'
           ? 0.95
