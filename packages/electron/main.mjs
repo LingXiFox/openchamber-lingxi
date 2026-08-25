@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net as electronNet, Notification, powerMonitor, powerSaveBlocker, protocol, screen, session, shell, webContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net as electronNet, Notification, powerMonitor, powerSaveBlocker, protocol, screen, session, shell, webContents } from 'electron';
 import contextMenu from 'electron-context-menu';
 import log from 'electron-log/main.js';
 import dgram from 'node:dgram';
@@ -34,6 +34,14 @@ import {
 import { unsupportedAppSpecificOpenError, validateLocalPath } from './path-open-utils.mjs';
 import { shouldAllowBrowserPanelCertificateError } from './browser-panel-security.mjs';
 import { isLocalIpcSenderUrl } from './ipc-sender-policy.mjs';
+import {
+  detectBackgroundImageType,
+  isBackgroundAssetId,
+  isBackgroundAssetReferenced,
+  readBackgroundAppearance,
+  sanitizeBackgroundAppearance,
+  writeBackgroundAppearance,
+} from './background-appearance.mjs';
 import { mintOutsideFileGrant } from '@openchamber/web/server/lib/fs/routes.js';
 import { fetchQuota as fetchSub2ApiQuota } from '@openchamber/web/server/lib/quota/providers/sub2api.js';
 
@@ -46,6 +54,7 @@ const electronStartupStartedAt = performance.now();
 
 const DEEP_LINK_PROTOCOL = 'openchamber';
 const UI_PROTOCOL = 'openchamber-ui';
+const BACKGROUND_PROTOCOL = 'openchamber-background';
 const PACKAGED_APP_USER_MODEL_ID = 'dev.openchamber.desktop';
 const DEV_APP_USER_MODEL_ID = 'dev.openchamber.desktop.dev';
 const APP_USER_MODEL_ID = app.isPackaged ? PACKAGED_APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID;
@@ -112,6 +121,14 @@ protocol.registerSchemesAsPrivileged([
       secure: true,
       supportFetchAPI: true,
       corsEnabled: true,
+    },
+  },
+  {
+    scheme: BACKGROUND_PROTOCOL,
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
     },
   },
 ]);
@@ -598,6 +615,102 @@ const mutateSettingsRoot = (mutator) => {
 };
 
 const writeSettingsRoot = async (root) => writeJsonFile(settingsFilePath(), root);
+
+const backgroundAssetsDirectory = () => path.join(path.dirname(settingsFilePath()), 'backgrounds');
+const backgroundAssetUrl = (assetId) => `${BACKGROUND_PROTOCOL}://asset/${assetId}`;
+const serializeBackgroundAppearance = (appearance) => ({
+  ...appearance,
+  assetUrl: appearance.assetId ? backgroundAssetUrl(appearance.assetId) : null,
+});
+
+const readDesktopBackgroundAppearance = (scope) =>
+  serializeBackgroundAppearance(readBackgroundAppearance(readSettingsRoot(), scope));
+
+const deleteBackgroundAsset = async (assetId) => {
+  if (!isBackgroundAssetId(assetId)) return;
+  await fsp.unlink(path.join(backgroundAssetsDirectory(), assetId)).catch((error) => {
+    if (error?.code !== 'ENOENT') log.warn('[electron] failed to delete background asset', error);
+  });
+};
+
+const updateDesktopBackgroundAppearance = async (scope, patch) => {
+  let nextAppearance;
+  await mutateSettingsRoot((root) => {
+    const current = readBackgroundAppearance(root, scope);
+    nextAppearance = sanitizeBackgroundAppearance({ ...current, ...patch });
+    return writeBackgroundAppearance(root, scope, nextAppearance);
+  });
+  return serializeBackgroundAppearance(nextAppearance);
+};
+
+const importDesktopBackground = async (browserWindow, scope) => {
+  const result = await dialog.showOpenDialog(browserWindow || undefined, {
+    filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths[0]) return null;
+
+  const selectedPath = result.filePaths[0];
+  const selectedInfo = await fsp.lstat(selectedPath);
+  if (!selectedInfo.isFile() || selectedInfo.isSymbolicLink()) {
+    throw new Error('Choose a regular image file');
+  }
+  const sourcePath = await fsp.realpath(selectedPath);
+  const stats = await fsp.stat(sourcePath);
+  if (!stats.isFile() || stats.size === 0 || stats.size > 5 * 1024 * 1024) {
+    throw new Error('Background images must be no larger than 5 MB');
+  }
+  const bytes = await fsp.readFile(sourcePath);
+  const imageType = detectBackgroundImageType(bytes);
+  if (!imageType) throw new Error('Choose a JPEG, PNG, or WebP image');
+  const sourceExtension = path.extname(sourcePath).toLowerCase();
+  const extensionMatches = imageType.extension === 'jpg'
+    ? sourceExtension === '.jpg' || sourceExtension === '.jpeg'
+    : sourceExtension === `.${imageType.extension}`;
+  if (!extensionMatches) throw new Error('The image extension does not match its contents');
+
+  const image = nativeImage.createFromBuffer(bytes);
+  if (image.isEmpty()) throw new Error('The selected image could not be decoded');
+  const { width, height } = image.getSize();
+  if (width <= 0 || height <= 0 || width > 8192 || height > 8192 || width * height > 40_000_000) {
+    throw new Error('Background image dimensions are too large');
+  }
+
+  const assetId = `${globalThis.crypto.randomUUID()}.${imageType.extension}`;
+  const assetsDirectory = backgroundAssetsDirectory();
+  const destination = path.join(assetsDirectory, assetId);
+  const temporary = `${destination}.tmp`;
+  await fsp.mkdir(assetsDirectory, { recursive: true, mode: 0o700 });
+  await fsp.writeFile(temporary, bytes, { mode: 0o600 });
+  await fsp.rename(temporary, destination);
+
+  const previous = readBackgroundAppearance(readSettingsRoot(), scope).assetId;
+  try {
+    const appearance = await updateDesktopBackgroundAppearance(scope, {
+      assetId,
+      fileName: path.basename(sourcePath),
+      width,
+      height,
+    });
+    if (previous && previous !== assetId) await deleteBackgroundAsset(previous);
+    return appearance;
+  } catch (error) {
+    await deleteBackgroundAsset(assetId);
+    throw error;
+  }
+};
+
+const clearDesktopBackground = async (scope) => {
+  const previous = readBackgroundAppearance(readSettingsRoot(), scope);
+  const appearance = await updateDesktopBackgroundAppearance(scope, {
+    assetId: undefined,
+    fileName: undefined,
+    width: undefined,
+    height: undefined,
+  });
+  if (previous.assetId) await deleteBackgroundAsset(previous.assetId);
+  return appearance;
+};
 
 // Stable per-install identifier for this desktop, persisted in settings. Used as
 // the client dedupe key on remote hosts so re-authenticating (e.g. after a login
@@ -1252,6 +1365,41 @@ const registerPackagedUiProtocol = () => {
     const html = await fsp.readFile(indexPath, 'utf8');
     const body = injectRuntimeConfigIntoHtml(html);
     return new Response(body, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  });
+};
+
+const registerBackgroundProtocol = () => {
+  protocol.handle(BACKGROUND_PROTOCOL, async (request) => {
+    let assetId = '';
+    try {
+      const url = new URL(request.url);
+      if (url.hostname !== 'asset') return new Response('Not found', { status: 404 });
+      assetId = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
+    } catch {
+      return new Response('Not found', { status: 404 });
+    }
+    if (!isBackgroundAssetId(assetId) || !isBackgroundAssetReferenced(readSettingsRoot(), assetId)) {
+      return new Response('Not found', { status: 404 });
+    }
+
+    const filePath = path.join(backgroundAssetsDirectory(), assetId);
+    try {
+      const info = await fsp.lstat(filePath);
+      if (!info.isFile() || info.isSymbolicLink() || info.size > 5 * 1024 * 1024) {
+        return new Response('Not found', { status: 404 });
+      }
+      const bytes = await fsp.readFile(filePath);
+      const imageType = detectBackgroundImageType(bytes);
+      if (!imageType) return new Response('Not found', { status: 404 });
+      return new Response(bytes, {
+        headers: {
+          'Content-Type': imageType.mime,
+          'Cache-Control': 'public, max-age=31536000, immutable',
+        },
+      });
+    } catch {
+      return new Response('Not found', { status: 404 });
+    }
   });
 };
 
@@ -3764,6 +3912,18 @@ const closeAllDevTunnels = () => {
 
 const handleInvoke = async (browserWindow, command, args = {}) => {
   switch (command) {
+    case 'desktop_background_get':
+      return readDesktopBackgroundAppearance(args);
+
+    case 'desktop_background_update':
+      return updateDesktopBackgroundAppearance(args, args.appearance);
+
+    case 'desktop_background_import':
+      return importDesktopBackground(browserWindow, args);
+
+    case 'desktop_background_clear':
+      return clearDesktopBackground(args);
+
     case 'desktop_fetch_sub2api_quota':
       return fetchSub2ApiQuota(args.accountId);
 
@@ -5382,6 +5542,7 @@ app.whenReady().then(async () => {
   });
   nativeTheme.themeSource = readThemeSource();
   registerPackagedUiProtocol();
+  registerBackgroundProtocol();
   hardenBrowserPanelSession();
   setupAutoUpdater();
 

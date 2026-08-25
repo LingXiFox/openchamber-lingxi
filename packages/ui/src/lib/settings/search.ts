@@ -76,6 +76,21 @@ const SETTINGS_SEARCH_ITEMS: readonly SettingsSearchItem[] = [
     isAvailable: (ctx) => ctx.isMac,
   },
   {
+    id: 'appearance.background',
+    page: 'appearance',
+    titleKey: 'settings.openchamber.visual.background.title',
+    descriptionKey: 'settings.openchamber.visual.background.description',
+    keywords: ['background', 'wallpaper', 'transparency', 'opacity', 'blur'],
+    isAvailable: (ctx) => ctx.isDesktop && ctx.isDesktopLocalOrigin,
+  },
+  {
+    id: 'appearance.background-opacity',
+    page: 'appearance',
+    titleKey: 'settings.openchamber.visual.background.opacity',
+    keywords: ['background', 'transparency', 'surface'],
+    isAvailable: (ctx) => ctx.isDesktop && ctx.isDesktopLocalOrigin,
+  },
+  {
     id: 'appearance.pwa-install-name',
     page: 'appearance',
     titleKey: 'settings.openchamber.visual.field.installAppName',
