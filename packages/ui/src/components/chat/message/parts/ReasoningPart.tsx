@@ -340,7 +340,11 @@ export const ReasoningTimelineBlock: React.FC<ReasoningTimelineBlockProps> = ({
                             )}
                             style={{ color: 'var(--tools-icon)' }}
                         >
-                            {isExpanded ? <Icon name="arrow-down-s" className="h-3.5 w-3.5" /> : <Icon name="arrow-right-s" className="h-3.5 w-3.5" />}
+                            {isExpanded ? (
+                                <Icon name="arrow-right-s" className="h-3.5 w-3.5 rotate-90 oc-motion-indicator" />
+                            ) : (
+                                <Icon name="arrow-right-s" className="h-3.5 w-3.5 oc-motion-indicator" />
+                            )}
                         </div>
                     </div>
 

@@ -1922,7 +1922,7 @@ export const Header: React.FC<HeaderProps> = ({
           of the overlay buttons — stays a window drag area. */}
       <div
         aria-hidden
-        className="shrink-0 self-stretch transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+        className="shrink-0 self-stretch transition-[width] duration-[var(--motion-duration-panel)] ease-[var(--motion-ease-emphasized)] motion-reduce:transition-none"
         style={{ width: headerInsetSpacerWidth }}
       />
       {/* No-drag carve under the persistent TitlebarLeftControls overlay so its
@@ -1930,7 +1930,7 @@ export const Header: React.FC<HeaderProps> = ({
           title slides in lockstep instead of snapping. */}
       <div
         aria-hidden
-        className="app-region-no-drag shrink-0 self-stretch transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+        className="app-region-no-drag shrink-0 self-stretch transition-[width] duration-[var(--motion-duration-panel)] ease-[var(--motion-ease-emphasized)] motion-reduce:transition-none"
         style={{ width: headerControlsSpacerWidth }}
       />
       {/* Sidebar toggle + project actions live in the persistent

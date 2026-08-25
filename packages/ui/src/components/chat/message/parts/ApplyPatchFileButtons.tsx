@@ -68,14 +68,12 @@ const getApplyPatchFileEntries = (metadata: Record<string, unknown> | undefined)
 };
 
 export const ApplyPatchFileButtons = ({
-    animate = true,
     metadata,
     onFileClick,
     openDiffLabel,
     showFileIcons = true,
     textClassName,
 }: {
-    animate?: boolean;
     metadata: Record<string, unknown> | undefined;
     onFileClick?: (file: Record<string, unknown>, event: React.MouseEvent<HTMLButtonElement>) => void;
     openDiffLabel: string;
@@ -93,7 +91,6 @@ export const ApplyPatchFileButtons = ({
                     <>
                         {showFileIcons ? <FileTypeIcon filePath={entry.path} className="h-3.5 w-3.5" /> : null}
                         <Text
-                            variant={animate ? 'generate-effect' : 'static'}
                             className={cn('min-w-0 max-w-full truncate', textClassName)}
                             style={{ color: 'var(--tools-description)' }}
                             title={entry.path}

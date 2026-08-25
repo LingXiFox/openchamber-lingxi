@@ -242,13 +242,12 @@ const getToolReadOffset = (activity: TurnActivityPart): number | undefined => {
     return Math.floor(rawOffset);
 };
 
-const renderReadFilePath = (displayPath: string, animate = true) => {
+const renderReadFilePath = (displayPath: string) => {
     const lastSlash = displayPath.lastIndexOf('/');
 
     if (lastSlash === -1) {
         return (
             <Text
-                variant={animate ? 'generate-effect' : 'static'}
                 className={cn('min-w-0 flex-1 truncate whitespace-nowrap', TOOL_ROW_DESCRIPTION_CLASS)}
                 style={{ color: 'var(--tools-title)' }}
                 title={displayPath}
@@ -279,7 +278,6 @@ const renderReadFilePath = (displayPath: string, animate = true) => {
             </span>
             <span className="flex-shrink-0" style={{ color: 'var(--tools-description)' }}>/</span>
             <Text
-                variant={animate ? 'generate-effect' : 'static'}
                 className="flex-shrink-0"
                 style={{ color: 'var(--tools-title)' }}
             >
@@ -451,7 +449,6 @@ const StaticGroupedToolRow: React.FC<StaticGroupedToolRowProps> = ({
         <StaticToolRow
             toolName={toolName}
             activities={activities}
-            animateTailText={animateTailText}
         />
     );
 
@@ -567,8 +564,7 @@ const areActivityListsEqual = (left: TurnActivityPart[], right: TurnActivityPart
 const StaticToolRowInner: React.FC<{
     toolName: string;
     activities: TurnActivityPart[];
-    animateTailText: boolean;
-}> = ({ toolName, activities, animateTailText }) => {
+}> = ({ toolName, activities }) => {
     const showToolFileIcons = useUIStore((state) => state.showToolFileIcons);
     const displayName = getToolMetadata(toolName).displayName;
     const icon = getToolIcon(toolName);
@@ -718,7 +714,7 @@ const StaticToolRowInner: React.FC<{
                         title={entry.offset ? `${entry.displayPath}:${entry.offset}` : entry.displayPath}
                     >
                         {showToolFileIcons ? <FileTypeIcon filePath={entry.path} className="h-3.5 w-3.5" /> : null}
-                        {renderReadFilePath(entry.displayPath, animateTailText)}
+                        {renderReadFilePath(entry.displayPath)}
                     </button>
                 ))
                 : null}
@@ -726,7 +722,6 @@ const StaticToolRowInner: React.FC<{
                 ? descriptions.map((desc, index) => (
                     <span key={`${desc}-${index}`} className="inline-flex min-w-0 flex-1">
                         <Text
-                            variant={animateTailText ? 'generate-effect' : 'static'}
                             className={cn('min-w-0 flex-1 truncate whitespace-nowrap', TOOL_ROW_DESCRIPTION_CLASS)}
                             style={{ color: 'var(--tools-description)' }}
                             title={desc}
@@ -775,7 +770,6 @@ const StaticToolRowInner: React.FC<{
                 : null}
             {!isReadGroup && !isSearchGroup && !isFetchGroup && !isSkillGroup && descriptions.length > 0 ? (
                 <Text
-                    variant={animateTailText ? 'generate-effect' : 'static'}
                     className={cn('min-w-0 flex-1 truncate whitespace-nowrap', TOOL_ROW_DESCRIPTION_CLASS)}
                     style={{ color: 'var(--tools-description)' }}
                 >
@@ -788,7 +782,6 @@ const StaticToolRowInner: React.FC<{
 
 export const StaticToolRow = React.memo(StaticToolRowInner, (prev, next) => {
     return prev.toolName === next.toolName
-        && prev.animateTailText === next.animateTailText
         && areActivityListsEqual(prev.activities, next.activities);
 });
 

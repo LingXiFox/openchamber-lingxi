@@ -99,7 +99,7 @@ export const TurnChangedFilesDropdown: React.FC<TurnChangedFilesDropdownProps> =
                 <Popover.Positioner side="top" align="start" sideOffset={4} collisionPadding={8}>
                     <Popover.Popup
                         style={changedFilesPopoverStyle}
-                        className={`${changedFilesPopoverClassName} transition-all duration-150 ease-out data-[starting-style]:opacity-0 data-[starting-style]:scale-95 data-[ending-style]:opacity-0 data-[ending-style]:scale-95`}
+                        className={`${changedFilesPopoverClassName} oc-motion-overlay-menu`}
                     >
                         <ChangedFilesList
                             files={changedFiles}

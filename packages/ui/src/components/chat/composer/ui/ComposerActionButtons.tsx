@@ -1,9 +1,11 @@
 /**
  * The composer's send / queue / stop control.
  *
- * Which one is shown depends on whether a turn is running: idle sends, a busy
- * session with content offers both queue (above) and stop, a busy session
- * without content offers only stop.
+ * Idle renders the send action; a busy session swaps the same button to stop
+ * (queue stays a separate affordance above). The button element itself never
+ * remounts across that swap: only the two stacked glyphs crossfade inside one
+ * fixed slot, so the hit target, focus, and form semantics stay put while the
+ * authoritative action switches synchronously.
  */
 
 import React from 'react';
@@ -45,32 +47,61 @@ export const ComposerActionButtons = React.memo(function ComposerActionButtons(p
     } = props;
     const { t } = useI18n();
 
-    const sendButton = (
+    const sendEnabled = canSend && (currentSessionId || newSessionDraftOpen);
+
+    const primaryButton = (
         <button
-            type={isMobile ? 'button' : 'submit'}
-            disabled={!canSend || (!currentSessionId && !newSessionDraftOpen)}
+            type={canAbort || isMobile ? 'button' : 'submit'}
+            disabled={!canAbort && !sendEnabled}
             onClick={(event) => {
+                if (canAbort) {
+                    if (isMobile) {
+                        event.preventDefault();
+                    }
+                    onAbort();
+                    return;
+                }
                 if (!isMobile) {
                     return;
                 }
-
                 event.preventDefault();
                 onPrimaryAction();
             }}
             className={cn(
                 footerIconButtonClass,
-                canSend && (currentSessionId || newSessionDraftOpen)
-                    ? 'text-primary hover:text-primary'
-                    : 'opacity-30'
+                'relative',
+                canAbort
+                    ? 'text-[var(--status-error)] hover:text-[var(--status-error)]'
+                    : sendEnabled
+                        ? 'text-primary hover:text-primary'
+                        : 'opacity-30'
             )}
-            aria-label={t('chat.chatInput.actions.sendMessageAria')}
+            aria-label={t(canAbort
+                ? 'chat.chatInput.actions.stopGeneratingAria'
+                : 'chat.chatInput.actions.sendMessageAria')}
         >
-            <Icon name="send-plane-2" className={cn(sendIconSizeClass)} />
+            <Icon
+                name="send-plane-2"
+                aria-hidden="true"
+                className={cn(
+                    sendIconSizeClass,
+                    'oc-motion-state-icon absolute inset-0 m-auto',
+                    canAbort && 'pointer-events-none scale-[var(--motion-scale-icon)] opacity-0',
+                )}
+            />
+            <StopIcon
+                aria-hidden="true"
+                className={cn(
+                    stopIconSizeClass,
+                    'oc-motion-state-icon absolute inset-0 m-auto',
+                    !canAbort && 'pointer-events-none scale-[var(--motion-scale-icon)] opacity-0',
+                )}
+            />
         </button>
     );
 
     if (!canAbort) {
-        return sendButton;
+        return primaryButton;
     }
 
     return (
@@ -95,17 +126,7 @@ export const ComposerActionButtons = React.memo(function ComposerActionButtons(p
                     <Icon name="send-plane-2" className={cn(sendIconSizeClass, '-rotate-90')} />
                 </button>
             ) : null}
-            <button
-                type="button"
-                onClick={onAbort}
-                className={cn(
-                    footerIconButtonClass,
-                    'text-[var(--status-error)] hover:text-[var(--status-error)]'
-                )}
-                aria-label={t('chat.chatInput.actions.stopGeneratingAria')}
-            >
-                <StopIcon className={cn(stopIconSizeClass)} />
-            </button>
+            {primaryButton}
         </div>
     );
 }, (prev, next) => (

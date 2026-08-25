@@ -899,7 +899,7 @@ const TaskSummaryEntryRow = React.memo(({
                 </span>
                 {hasLabel ? (
                     status !== 'error' && shouldRenderGitPathLabel(toolName, label) ? (
-                        renderAnimatedPathWithIcon(label, animateTailText, true, showToolFileIcons)
+                        renderAnimatedPathWithIcon(label, true, showToolFileIcons)
                     ) : (
                         status === 'error' ? (
                             <span className={cn(
@@ -910,7 +910,6 @@ const TaskSummaryEntryRow = React.memo(({
                             </span>
                         ) : (
                             <Text
-                                variant={animateTailText ? 'generate-effect' : 'static'}
                                 className="typography-meta flex-1 min-w-0 truncate text-muted-foreground/70"
                                 style={{ color: 'var(--tools-description)' }}
                                 title={label}
@@ -1082,11 +1081,10 @@ const TaskToolSummary: React.FC<{
                             setIsOutputExpanded((prev) => !prev);
                         }}
                     >
-                        {isOutputExpanded ? (
-                            <Icon name="arrow-down-s" className="h-3.5 w-3.5 flex-shrink-0" />
-                        ) : (
-                            <Icon name="arrow-right-s" className="h-3.5 w-3.5 flex-shrink-0" />
-                        )}
+                        <Icon
+                            name="arrow-right-s"
+                            className={cn('h-3.5 w-3.5 flex-shrink-0 oc-motion-indicator', isOutputExpanded && 'rotate-90')}
+                        />
                         <span className="typography-meta text-foreground/80 font-medium">{t('chat.toolPart.output')}</span>
                     </button>
                     {isOutputExpanded ? (
@@ -1148,7 +1146,7 @@ const renderPathLikeGitChanges = (path: string, grow = true) => {
     );
 };
 
-const renderAnimatedPathWithIcon = (path: string, animate = true, grow = true, showFileIcons = true) => {
+const renderAnimatedPathWithIcon = (path: string, grow = true, showFileIcons = true) => {
     const lastSlash = path.lastIndexOf('/');
 
     if (lastSlash === -1) {
@@ -1156,7 +1154,6 @@ const renderAnimatedPathWithIcon = (path: string, animate = true, grow = true, s
             <span className={cn('min-w-0 inline-flex items-center gap-1 overflow-hidden', grow && 'flex-1')} title={path}>
                 {showFileIcons ? <FileTypeIcon filePath={path} className="h-3.5 w-3.5 flex-shrink-0" /> : null}
                 <Text
-                    variant={animate ? 'generate-effect' : 'static'}
                     className={cn('min-w-0 truncate whitespace-nowrap', TOOL_ROW_DESCRIPTION_CLASS, grow && 'flex-1')}
                     style={{ color: 'var(--tools-title)' }}
                 >
@@ -1189,7 +1186,6 @@ const renderAnimatedPathWithIcon = (path: string, animate = true, grow = true, s
                 </span>
                 <span className="flex-shrink-0" style={{ color: 'var(--tools-description)' }}>/</span>
                 <Text
-                    variant={animate ? 'generate-effect' : 'static'}
                     className="flex-shrink-0"
                     style={{ color: 'var(--tools-title)' }}
                 >
@@ -2107,9 +2103,10 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
                                         {getToolIcon(normalizedPartTool || part.tool)}
                                     </span>
                                     <Icon
-                                        name={isExpanded ? 'arrow-down-s' : 'arrow-right-s'}
+                                        name="arrow-right-s"
                                         className={cn(
-                                            'absolute inset-0 h-3.5 w-3.5 transition-opacity',
+                                            'absolute inset-0 h-3.5 w-3.5 transition-opacity oc-motion-indicator',
+                                            isExpanded && 'rotate-90',
                                             isExpanded ? 'opacity-100' : 'opacity-0 group-hover/tool:opacity-100',
                                         )}
                                     />
@@ -2125,7 +2122,6 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
                             </div>
                             <ApplyPatchFileButtons
                                 metadata={metadata}
-                                animate={animateTailText}
                                 showFileIcons={showToolFileIcons}
                                 textClassName={TOOL_ROW_DESCRIPTION_CLASS}
                                 openDiffLabel={t('chat.toolPart.openFileDiff')}
@@ -2158,7 +2154,10 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
                                         !isExpanded && 'opacity-0 group-hover/tool:opacity-100'
                                     )}
                                 >
-                                    {isExpanded ? <Icon name="arrow-down-s" className="h-3.5 w-3.5" /> : <Icon name="arrow-right-s" className="h-3.5 w-3.5" />}
+                                    <Icon
+                                        name="arrow-right-s"
+                                        className={cn('h-3.5 w-3.5 oc-motion-indicator', isExpanded && 'rotate-90')}
+                                    />
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -2198,14 +2197,13 @@ const ToolPartContent: React.FC<ToolPartProps> = ({
                                 </span>
                             )}
                             {!justificationText && normalizedPartTool === 'lsp' && descriptionPath ? (
-                                renderAnimatedPathWithIcon(descriptionPath, animateTailText, false, showToolFileIcons)
+                                renderAnimatedPathWithIcon(descriptionPath, false, showToolFileIcons)
                             ) : null}
                             {!justificationText && normalizedPartTool !== 'lsp' && description && (
                                 descriptionPath && description === descriptionPath ? (
-                                    renderAnimatedPathWithIcon(descriptionPath, animateTailText, false, showToolFileIcons)
+                                    renderAnimatedPathWithIcon(descriptionPath, false, showToolFileIcons)
                                 ) : (
                                     <Text
-                                        variant={animateTailText ? 'generate-effect' : 'static'}
                                         className={cn('min-w-0 truncate', TOOL_ROW_DESCRIPTION_CLASS)}
                                         style={{ color: 'var(--tools-description)' }}
                                         title={description}

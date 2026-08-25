@@ -93,7 +93,7 @@ const getToolIcon = (toolName: string) => {
     return <Icon name="tools" className={iconClass} />;
 };
 
-const PREVIEW_ANIMATION_MS = 150;
+const PREVIEW_ANIMATION_MS = 160;
 const MERMAID_DIALOG_HEADER_HEIGHT = 40;
 const MERMAID_ASPECT_RETRY_DELAY_MS = 120;
 const MERMAID_ASPECT_MAX_RETRIES = 3;
@@ -238,12 +238,10 @@ const getSvgAspectRatio = (svg: SVGElement): number | null => {
 const usePreviewOverlayState = (open: boolean) => {
     const [isRendered, setIsRendered] = React.useState(open);
     const [isVisible, setIsVisible] = React.useState(open);
-    const [isTransitioning, setIsTransitioning] = React.useState(false);
 
     React.useEffect(() => {
         if (open) {
             setIsRendered(true);
-            setIsTransitioning(true);
             if (typeof window === 'undefined') {
                 setIsVisible(true);
                 return;
@@ -253,18 +251,12 @@ const usePreviewOverlayState = (open: boolean) => {
                 setIsVisible(true);
             });
 
-            const doneId = window.setTimeout(() => {
-                setIsTransitioning(false);
-            }, PREVIEW_ANIMATION_MS);
-
             return () => {
                 window.cancelAnimationFrame(raf);
-                window.clearTimeout(doneId);
             };
         }
 
         setIsVisible(false);
-        setIsTransitioning(true);
         if (typeof window === 'undefined') {
             setIsRendered(false);
             return;
@@ -272,7 +264,6 @@ const usePreviewOverlayState = (open: boolean) => {
 
         const timeoutId = window.setTimeout(() => {
             setIsRendered(false);
-            setIsTransitioning(false);
         }, PREVIEW_ANIMATION_MS);
 
         return () => {
@@ -280,7 +271,7 @@ const usePreviewOverlayState = (open: boolean) => {
         };
     }, [open]);
 
-    return { isRendered, isVisible, isTransitioning };
+    return { isRendered, isVisible };
 };
 
 const usePreviewViewport = (open: boolean) => {
@@ -332,7 +323,7 @@ const ImagePreviewDialog: React.FC<{
 
     const [currentIndex, setCurrentIndex] = React.useState(0);
     const [imageNaturalSize, setImageNaturalSize] = React.useState<{ width: number; height: number } | null>(null);
-    const { isRendered, isVisible, isTransitioning } = usePreviewOverlayState(popup.open);
+    const { isRendered, isVisible } = usePreviewOverlayState(popup.open);
     const viewport = usePreviewViewport(popup.open);
 
     React.useEffect(() => {
@@ -428,11 +419,8 @@ const ImagePreviewDialog: React.FC<{
         <div className={cn('fixed inset-0 z-50', popup.open ? 'pointer-events-auto' : 'pointer-events-none')}>
             <div
                 aria-hidden="true"
-                className={cn(
-                    'absolute inset-0 bg-black/40',
-                    isTransitioning && 'transition-opacity duration-150 ease-out',
-                    isVisible ? 'opacity-100' : 'opacity-0'
-                )}
+                data-visible={isVisible}
+                className="oc-motion-overlay-backdrop absolute inset-0 bg-black/40"
                 onMouseDown={() => onOpenChange(false)}
             />
 
@@ -466,11 +454,8 @@ const ImagePreviewDialog: React.FC<{
                 )}
             >
                 <div
-                    className={cn(
-                        'pointer-events-auto flex flex-col gap-2',
-                        isTransitioning && 'transition-opacity duration-150 ease-out',
-                        isVisible ? 'opacity-100' : 'opacity-0'
-                    )}
+                    data-visible={isVisible}
+                    className="oc-motion-overlay-preview pointer-events-auto flex flex-col gap-2"
                     style={{ width: `${imageDisplaySize.width}px` }}
                 >
                     <div className="flex items-center justify-between gap-2">
@@ -643,7 +628,7 @@ const MermaidPreviewDialog: React.FC<{
     const [source, setSource] = React.useState<string>(popup.mermaid?.source || '');
     const [status, setStatus] = React.useState<'idle' | 'loading' | 'ready' | 'error'>(popup.mermaid?.source ? 'ready' : 'idle');
     const [errorMessage, setErrorMessage] = React.useState<string>('');
-    const { isRendered, isVisible, isTransitioning } = usePreviewOverlayState(popup.open);
+    const { isRendered, isVisible } = usePreviewOverlayState(popup.open);
     const [diagramAspectRatio, setDiagramAspectRatio] = React.useState<number | null>(null);
     const viewport = usePreviewViewport(popup.open);
     const requestIdRef = React.useRef(0);
@@ -884,11 +869,8 @@ const MermaidPreviewDialog: React.FC<{
         <div className={cn('fixed inset-0 z-50', popup.open ? 'pointer-events-auto' : 'pointer-events-none')}>
             <div
                 aria-hidden="true"
-                className={cn(
-                    'absolute inset-0',
-                    isTransitioning && 'transition-opacity duration-150 ease-out',
-                    isVisible ? 'opacity-100' : 'opacity-0'
-                )}
+                data-visible={isVisible}
+                className="oc-motion-overlay-backdrop absolute inset-0"
                 style={{ backgroundColor: 'color-mix(in srgb, var(--surface-background) 70%, transparent)' }}
                 onMouseDown={() => onOpenChange(false)}
             />
@@ -900,11 +882,8 @@ const MermaidPreviewDialog: React.FC<{
                 )}
             >
                 <div
-                    className={cn(
-                        'pointer-events-auto flex flex-col gap-2',
-                        isTransitioning && 'transition-opacity duration-150 ease-out',
-                        isVisible ? 'opacity-100' : 'opacity-0'
-                    )}
+                    data-visible={isVisible}
+                    className="oc-motion-overlay-preview pointer-events-auto flex flex-col gap-2"
                     style={{ width: `${dialogSize.width}px` }}
                     onMouseDown={(event) => event.stopPropagation()}
                 >
