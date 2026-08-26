@@ -83,17 +83,40 @@ available in the development repository for QA work.
 
 ## Build & sign (macOS arm64, from THIS repository only)
 
+The committed signed-build path is `scripts/build-macos-remote.sh`. It copies
+only source to the isolated remote build root, prompts for the P12 password,
+then runs `scripts/build-macos-remote-worker.sh`. The worker produces the app,
+DMG, ZIP, blockmap, `latest-mac.yml`, and `codesign.txt`, and verifies code
+signing and hardened runtime.
+
 ```bash
-bun install
-bun run --cwd packages/electron package   # full desktop package pipeline
+OPENCHAMBER_MACOS_P12_PATH=<approved-P12-path-on-macos-host> \
+OPENCHAMBER_MACOS_SIGNING_IDENTITY='Apple Development: handsomezhu2019@outlook.com (WV86S3A54T)' \
+./scripts/build-macos-remote.sh --arch arm64 \
+  --identity 'Apple Development: handsomezhu2019@outlook.com (WV86S3A54T)'
 ```
 
-Sign with the local Apple Development identity above, then verify:
+The P12 path and the exact 1.0.0 packaging invocation were not recorded in
+Git. Before the first 1.1.0 build, verify that the approved P12 contains the
+identity above and run the script with `--check`; do not substitute an
+unverified certificate or create a new signing identity.
+
+After the signed build, verify:
 
 ```bash
 codesign --verify --deep --strict --verbose=2 <app>
 ```
 
-Publish artifacts to GitHub Release `lingxi-v<X.Y.Z>` on
-`LingXiFox/openchamber-lingxi`: signed `.zip`, `latest-mac.yml` matching the
-uploaded zip (url/sha512/size), optional `.blockmap`, `SHA256SUMS.txt`.
+The existing release tag rule is `lingxi-v<X.Y.Z>` (`lingxi-v1.0.0`), not the
+upstream `v<X.Y.Z>` rule. The 1.1.0 release must keep `lingxi-v1.1.0` and
+publish to `LingXiFox/openchamber-lingxi`: the signed ZIP, `latest-mac.yml`
+matching the uploaded ZIP (url/sha512/size), optional `.blockmap`, and
+`SHA256SUMS.txt`.
+
+The 1.0.0 uploaded ZIP was manually named
+`OpenChamber-LingXiFox-1.0.0-macos-arm64.zip`; it does not match the current
+electron-builder artifact template and did not include `latest-mac.yml` or a
+blockmap. Before building 1.1.0, choose and record one deterministic way to
+preserve that public asset name while its bundle/updater version is 1.21.0,
+then regenerate `latest-mac.yml` against that final ZIP. Do not upload an
+unmodified builder manifest that points to a renamed asset.
