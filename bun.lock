@@ -97,7 +97,7 @@
     },
     "packages/electron": {
       "name": "@openchamber/electron",
-      "version": "1.19.0",
+      "version": "1.20.0",
       "dependencies": {
         "@openchamber/web": "workspace:*",
         "electron-context-menu": "^4.1.2",
@@ -134,7 +134,7 @@
     },
     "packages/ui": {
       "name": "@openchamber/ui",
-      "version": "1.19.0",
+      "version": "1.20.0",
       "dependencies": {
         "@aparajita/capacitor-secure-storage": "^8.0.0",
         "@base-ui/react": "^1.4.0",
@@ -205,6 +205,7 @@
         "sonner": "^2.0.7",
         "strip-json-comments": "^5.0.3",
         "tailwind-merge": "^3.3.1",
+        "thinking-orbs": "^0.3.1",
         "virtua": "0.49.1",
         "yaml": "^2.8.1",
         "zod": "^4.3.6",
@@ -238,7 +239,7 @@
     },
     "packages/vscode": {
       "name": "openchamber",
-      "version": "1.19.0",
+      "version": "1.20.0",
       "dependencies": {
         "@openchamber/ui": "workspace:*",
         "@opencode-ai/sdk": "1.18.21",
@@ -261,7 +262,7 @@
     },
     "packages/web": {
       "name": "@openchamber/web",
-      "version": "1.19.0",
+      "version": "1.20.0",
       "bin": {
         "openchamber": "./bin/cli.js",
       },
@@ -3172,6 +3173,8 @@
     "text-table": ["text-table@0.2.0", "", {}, "sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw=="],
 
     "textextensions": ["textextensions@6.11.0", "", { "dependencies": { "editions": "^6.21.0" } }, "sha512-tXJwSr9355kFJI3lbCkPpUH5cP8/M0GGy2xLO34aZCjMXBaK3SoPnZwr/oWmo1FdCnELcs4npdCIOFtq9W3ruQ=="],
+
+    "thinking-orbs": ["thinking-orbs@0.3.1", "", { "peerDependencies": { "react": ">=18.0.0" } }, "sha512-3BG1aeB1RUTxItCml/BBuIz5JRM4kZqGuyx+vouv0fXTtcR9ZNoKjWGneHPx94y74GxgArwJZ1qbJR5dt54kSw=="],
 
     "through2": ["through2@4.0.2", "", { "dependencies": { "readable-stream": "3" } }, "sha512-iOqSav00cVxEEICeD7TjLB1sueEL+81Wpzp2bY17uZjZN0pWZPuo4suZ/61VujxmqSGFfgOcNuTZ85QJwNZQpw=="],
 

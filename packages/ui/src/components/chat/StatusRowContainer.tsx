@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { useAgentActivity } from '@/hooks/useAgentActivity';
 import { useAssistantStatus } from '@/hooks/useAssistantStatus';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { useSessionUIStore } from '@/sync/session-ui-store';
@@ -22,6 +23,7 @@ export const StatusRowContainer: React.FC = React.memo(() => {
         }, [currentSessionId]),
     );
     const { activeModel, working } = useAssistantStatus();
+    const activity = useAgentActivity();
     const currentAgentName = useConfigStore((state) => state.currentAgentName);
     const providers = useConfigStore((state) => state.providers);
 
@@ -41,7 +43,6 @@ export const StatusRowContainer: React.FC = React.memo(() => {
         <StatusRow
             isWorking={working.isWorking}
             statusText={working.statusText}
-            isGenericStatus={working.isGenericStatus}
             isWaitingForPermission={working.isWaitingForPermission}
             wasAborted={wasAborted || working.wasAborted}
             abortActive={wasAborted || working.abortActive}
@@ -51,6 +52,7 @@ export const StatusRowContainer: React.FC = React.memo(() => {
             agentName={currentAgentName}
             modelName={modelDisplayName}
             providerId={activeModel?.providerId ?? null}
+            activity={activity}
         />
     );
 });

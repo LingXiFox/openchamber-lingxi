@@ -1,5 +1,8 @@
 import React from 'react';
 import { describe, expect, test } from 'bun:test';
+import { readFile, readdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import { I18nProvider } from '@/lib/i18n';
@@ -19,6 +22,57 @@ const LONG_JUSTIFICATION =
   'when multiple sessions have the same activity state.';
 
 describe('ReasoningTimelineBlock', () => {
+  test('active expanded reasoning renders the native 20px breathing context orb', () => {
+    const markup = renderToStaticMarkup(
+      <I18nProvider>
+        <ReasoningTimelineBlock
+          text={LONG_REASONING}
+          variant="thinking"
+          blockId="active-reasoning-test"
+          time={{ start: 1 }}
+          isStreaming
+        />
+      </I18nProvider>,
+    );
+
+    expect(markup).toContain('data-reasoning-context-orb="true"');
+    expect(markup).toContain('aria-hidden="true"');
+    expect(markup).toContain('aria-label="Thinking…"');
+    expect(markup).toContain('width:20px');
+    expect(markup).toContain('height:20px');
+  });
+
+  test('completed and hydrated reasoning never retain an active orb', () => {
+    const completedMarkup = renderToStaticMarkup(
+      <I18nProvider>
+        <ReasoningTimelineBlock
+          text={LONG_REASONING}
+          variant="thinking"
+          blockId="completed-reasoning-test"
+          time={{ start: 1, end: 2 }}
+          isStreaming
+          defaultExpanded
+        />
+      </I18nProvider>,
+    );
+    const hydratedMarkup = renderToStaticMarkup(
+      <I18nProvider>
+        <ReasoningTimelineBlock
+          text={LONG_REASONING}
+          variant="thinking"
+          blockId="hydrated-reasoning-test"
+          time={{ start: 1, end: 2 }}
+          defaultExpanded
+        />
+      </I18nProvider>,
+    );
+
+    expect(completedMarkup).not.toContain('data-reasoning-context-orb');
+    expect(completedMarkup).not.toContain('<canvas');
+    expect(hydratedMarkup).not.toContain('data-reasoning-context-orb');
+    expect(hydratedMarkup).not.toContain('<canvas');
+  });
+
   test('renders reasoning traces behind an accessible collapsed disclosure by default', () => {
     const markup = renderToStaticMarkup(
       <I18nProvider>
@@ -111,5 +165,31 @@ describe('ReasoningTimelineBlock', () => {
 
     expect(markup).toContain('Planning accessible icon labels with translations');
     expect(markup).not.toContain('&lt;!-- --&gt;');
+  });
+
+  test('ties the context orb directly to active expanded reasoning without the primary stabilizer', async () => {
+    const source = await readFile(
+      fileURLToPath(new URL('./ReasoningPart.tsx', import.meta.url)),
+      'utf8',
+    );
+
+    expect(source).toContain("const isReasoningActive = variant === 'thinking' && isStreaming && !hasEnded");
+    expect(source).toContain('isReasoningActive && isExpanded');
+    expect(source).not.toContain('useStabilizedAgentActivity');
+    expect(source).not.toContain('setTimeout(callback');
+  });
+
+  test('keeps ThinkingOrb instances limited to primary and reasoning context', async () => {
+    const sourceRoot = fileURLToPath(new URL('../../../../', import.meta.url));
+    const sourceFiles = await readdir(sourceRoot, { recursive: true });
+    let instanceCount = 0;
+
+    for (const relativePath of sourceFiles) {
+      if (!relativePath.endsWith('.tsx') || relativePath.endsWith('.test.tsx')) continue;
+      const source = await readFile(join(sourceRoot, relativePath), 'utf8');
+      instanceCount += source.match(/<ThinkingOrb\b/g)?.length ?? 0;
+    }
+
+    expect(instanceCount).toBe(2);
   });
 });
