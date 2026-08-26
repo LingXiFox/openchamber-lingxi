@@ -3,6 +3,15 @@ import { settingsDict } from './es.settings';
 
 export const dict: Record<I18nKey, string> = {
   ...settingsDict,
+  'chat.statusRow.activity.connecting': 'Conectando',
+  'chat.statusRow.activity.retrying': 'Reintentando',
+  'chat.statusRow.activity.listening': 'Escuchando',
+  'chat.statusRow.activity.working': 'Trabajando',
+  'chat.statusRow.activity.searching': 'Buscando',
+  'chat.statusRow.activity.reasoning': 'Razonando',
+  'chat.statusRow.activity.composing': 'Redactando',
+  'chat.statusRow.activity.editing': 'Editando',
+  'chat.statusRow.activity.orchestrating': 'Delegando tarea',
   'terminalView.actions.attachSelection': 'Adjuntar salida seleccionada',
   'terminalView.actions.restart': 'Reiniciar terminal',
   'chat.message.terminalContext': '{terminal}, líneas {start}-{end}',

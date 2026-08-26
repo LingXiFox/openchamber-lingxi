@@ -1,21 +1,23 @@
 import React from 'react';
-import { BusyDots } from './BusyDots';
+import { ActivityIndicator } from './ActivityIndicator';
 import { useI18n } from '@/lib/i18n';
 import { useProviderLogo } from '@/hooks/useProviderLogo';
 import { useThemeSystem } from '@/contexts/useThemeSystem';
+import { resolveOrbState } from '@/lib/agent-activity-orb';
+import type { AgentActivity } from '@/lib/agent-activity';
+import { formatAgentActivityLabel } from '@/lib/agent-activity-presentation';
+import { useStabilizedAgentActivity } from '@/hooks/useStabilizedAgentActivity';
 
 interface WorkingPlaceholderProps {
   isWorking: boolean;
   statusText: string | null;
-  isGenericStatus?: boolean;
   isWaitingForPermission?: boolean;
   retryInfo?: { attempt?: number; next?: number } | null;
   agentName?: string;
   modelName?: string | null;
   providerId?: string | null;
+  activity?: AgentActivity | null;
 }
-
-const STATUS_DISPLAY_TIME_MS = 1200;
 
 const EPOCH_SECONDS_THRESHOLD = 1_000_000_000;
 const EPOCH_MILLISECONDS_THRESHOLD = 1_000_000_000_000;
@@ -60,26 +62,19 @@ const formatRetryCountdown = (seconds: number): string => {
 export function WorkingPlaceholder({
   isWorking,
   statusText,
-  isGenericStatus,
   isWaitingForPermission,
   retryInfo,
   modelName,
   providerId,
+  activity,
 }: WorkingPlaceholderProps) {
   const { t } = useI18n();
   const { src: providerLogoSrc, onError: handleProviderLogoError, hasLogo: hasProviderLogo } = useProviderLogo(providerId ?? null);
   const { currentTheme } = useThemeSystem();
   const isDarkTheme = currentTheme?.metadata.variant === 'dark';
-  const [displayedText, setDisplayedText] = React.useState<string | null>(null);
-  const [displayedPermission, setDisplayedPermission] = React.useState<boolean>(false);
-  const displayedTextRef = React.useRef(displayedText);
-  const displayedPermissionRef = React.useRef(displayedPermission);
-  displayedTextRef.current = displayedText;
-  displayedPermissionRef.current = displayedPermission;
-
-  const statusShownAtRef = React.useRef<number>(0);
-  const queuedStatusRef = React.useRef<{ text: string; permission: boolean } | null>(null);
-  const processQueueTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stabilizedActivity = useStabilizedAgentActivity(activity ?? 'idle');
+  const primaryLabel = formatAgentActivityLabel(stabilizedActivity, t);
+  const orbState = resolveOrbState(stabilizedActivity);
 
   // Countdown state for retry mode
   const [retryCountdown, setRetryCountdown] = React.useState<number | null>(null);
@@ -103,159 +98,59 @@ export function WorkingPlaceholder({
     return () => clearInterval(id);
   }, [retryInfo?.next, retryInfo?.attempt]);
 
-  const clearTimers = React.useCallback(() => {
-    if (processQueueTimerRef.current) {
-      clearTimeout(processQueueTimerRef.current);
-      processQueueTimerRef.current = null;
-    }
-  }, []);
-
-  const showStatus = React.useCallback((text: string, permission: boolean) => {
-    clearTimers();
-    queuedStatusRef.current = null;
-    setDisplayedText(text);
-    setDisplayedPermission(permission);
-    statusShownAtRef.current = Date.now();
-  }, [clearTimers]);
-
-  const scheduleQueueProcess = React.useCallback(() => {
-    if (processQueueTimerRef.current) return;
-    const elapsed = Date.now() - statusShownAtRef.current;
-    const remaining = Math.max(0, STATUS_DISPLAY_TIME_MS - elapsed);
-    processQueueTimerRef.current = setTimeout(() => {
-      processQueueTimerRef.current = null;
-
-      const queued = queuedStatusRef.current;
-      if (queued) {
-        showStatus(queued.text, queued.permission);
-      }
-    }, remaining);
-  }, [showStatus]);
-
-  React.useEffect(() => {
-    if (!isWorking) {
-      clearTimers();
-      queuedStatusRef.current = null;
-      setDisplayedText(null);
-      setDisplayedPermission(false);
-      return;
-    }
-
-    // Retry state has its own display — skip the normal queue
-    if (retryInfo) {
-      clearTimers();
-      queuedStatusRef.current = null;
-      return;
-    }
-
-    const incomingText = isWaitingForPermission ? 'waiting for permission' : statusText;
-    const incomingPermission = Boolean(isWaitingForPermission);
-    const incomingGeneric = Boolean(isGenericStatus) && !incomingPermission;
-
-    if (!incomingText) {
-      return;
-    }
-
-    if (!displayedTextRef.current) {
-      showStatus(incomingText, incomingPermission);
-      return;
-    }
-
-    if (incomingText === displayedTextRef.current && incomingPermission === displayedPermissionRef.current) {
-      return;
-    }
-
-    // Ignore generic churn.
-    if (incomingGeneric) {
-      return;
-    }
-
-    const elapsed = Date.now() - statusShownAtRef.current;
-    if (elapsed >= STATUS_DISPLAY_TIME_MS) {
-      showStatus(incomingText, incomingPermission);
-      return;
-    }
-
-    queuedStatusRef.current = { text: incomingText, permission: incomingPermission };
-    scheduleQueueProcess();
-  }, [
-    isWorking,
-    statusText,
-    isGenericStatus,
-    isWaitingForPermission,
-    retryInfo,
-    clearTimers,
-    showStatus,
-    scheduleQueueProcess,
-  ]);
-
-  React.useEffect(() => () => clearTimers(), [clearTimers]);
-
-  if (!isWorking) {
+  if (!isWorking || !primaryLabel) {
     return null;
   }
 
-  // Retry state: show countdown and attempt info
+  const activityIndicator = (
+    <ActivityIndicator orbState={orbState} />
+  );
+
+  const trimmedModelName = modelName?.trim() ?? '';
+  let activityDetail = statusText;
   if (retryInfo) {
     const attemptLabel = retryInfo.attempt && retryInfo.attempt > 1 ? ` (attempt ${retryInfo.attempt})` : '';
     const countdownLabel = retryCountdown !== null && retryCountdown > 0
       ? ` in ${formatRetryCountdown(retryCountdown)}`
       : '';
-    const retryText = `Retrying${countdownLabel}${attemptLabel}`;
-
-    return (
-      <div
-        className="flex h-full items-center text-muted-foreground pl-0.5"
-        role="status"
-        aria-live="polite"
-        aria-label={`${retryText}...`}
-      >
-        <span className="typography-ui-header">
-          {retryText}
-          <BusyDots />
-        </span>
-      </div>
-    );
+    activityDetail = `Retry${countdownLabel}${attemptLabel}`;
   }
-
-  if (!displayedText) {
-    return null;
-  }
-
-  const trimmedModelName = typeof modelName === 'string' ? modelName.trim() : '';
   const label = trimmedModelName.length > 0
-    ? t('chat.statusRow.modelStatus', { model: trimmedModelName, status: displayedText })
-    : displayedText.charAt(0).toUpperCase() + displayedText.slice(1);
+    ? t('chat.statusRow.modelStatus', { model: trimmedModelName, status: primaryLabel })
+    : primaryLabel;
+  const accessibleLabel = activityDetail ? `${label}: ${activityDetail}` : label;
 
   return (
     <div
-      // Full muted-foreground, matching the scroll-to-bottom pill's status
-      // text: the row and the pill hand off to each other in the same spot
-      // and must read as one element changing chrome.
-      className={
-        'flex h-full items-center text-muted-foreground'
-      }
+      className="flex min-h-16 min-w-0 items-center gap-2"
       role="status"
-      aria-live={displayedPermission ? 'assertive' : 'polite'}
-      aria-label={label}
-      data-waiting={displayedPermission ? 'true' : undefined}
+      aria-live={isWaitingForPermission ? 'assertive' : 'polite'}
+      aria-label={accessibleLabel}
+      data-waiting={isWaitingForPermission ? 'true' : undefined}
     >
-      <span className="text-sm">
-        {hasProviderLogo && providerLogoSrc ? (
-          <img
-            src={providerLogoSrc}
-            alt=""
-            aria-hidden="true"
-            className="inline-block h-3.5 w-3.5 mr-1.5 align-[-2px]"
-            style={{
-              filter: isDarkTheme ? 'brightness(0.9) contrast(1.1) invert(1)' : 'brightness(0.9) contrast(1.1)',
-            }}
-            onError={handleProviderLogoError}
-          />
+      {activityIndicator}
+      <div className="flex h-16 min-w-0 flex-col justify-center pt-4">
+        <span className="truncate text-sm font-medium text-foreground">{primaryLabel}</span>
+        {trimmedModelName || activityDetail ? (
+          <span className="flex min-w-0 items-center gap-1 truncate typography-meta text-muted-foreground/70">
+            {hasProviderLogo && providerLogoSrc ? (
+              <img
+                src={providerLogoSrc}
+                alt=""
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 opacity-70"
+                style={{
+                  filter: isDarkTheme ? 'brightness(0.9) contrast(1.1) invert(1)' : 'brightness(0.9) contrast(1.1)',
+                }}
+                onError={handleProviderLogoError}
+              />
+            ) : null}
+            {trimmedModelName ? <span className="truncate">{trimmedModelName}</span> : null}
+            {trimmedModelName && activityDetail ? <span aria-hidden="true">·</span> : null}
+            {activityDetail ? <span className="truncate">{activityDetail}</span> : null}
+          </span>
         ) : null}
-        {label}
-        <BusyDots />
-      </span>
+      </div>
     </div>
   );
 }

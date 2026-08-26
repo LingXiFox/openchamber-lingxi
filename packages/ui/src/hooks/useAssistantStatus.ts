@@ -18,7 +18,6 @@ interface WorkingSummary {
     isCooldown: boolean;
     lifecyclePhase: MessageStreamPhase | null;
     statusText: string | null;
-    isGenericStatus: boolean;
     isWaitingForPermission: boolean;
     canAbort: boolean;
     compactionDeadline: number | null;
@@ -61,7 +60,6 @@ const DEFAULT_WORKING: WorkingSummary = {
     isCooldown: false,
     lifecyclePhase: null,
     statusText: null,
-    isGenericStatus: true,
     isWaitingForPermission: false,
     canAbort: false,
     compactionDeadline: null,
@@ -119,7 +117,6 @@ type ParsedStatusResult = {
     activePartType: 'text' | 'tool' | 'reasoning' | 'editing' | undefined;
     activeToolName: string | undefined;
     statusText: string;
-    isGenericStatus: boolean;
 };
 
 const getToolStatusPhrase = (toolName: string): string => {
@@ -187,7 +184,6 @@ const createParsedStatus = (parts: Part[], genericKey: string): ParsedStatusResu
         }
     }
 
-    const isGenericStatus = activePartType === undefined;
     const statusText = (() => {
         if (activePartType === 'editing') return activeToolName === 'multiedit' ? getToolStatusPhrase(activeToolName) : 'editing file';
         if (activePartType === 'tool' && activeToolName) return getToolStatusPhrase(activeToolName);
@@ -196,7 +192,7 @@ const createParsedStatus = (parts: Part[], genericKey: string): ParsedStatusResu
         return getStableWorkingPhrase(genericKey);
     })();
 
-    return { activePartType, activeToolName, statusText, isGenericStatus };
+    return { activePartType, activeToolName, statusText };
 };
 
 const encodeParsedStatus = (status: ParsedStatusResult): string => {
@@ -204,19 +200,17 @@ const encodeParsedStatus = (status: ParsedStatusResult): string => {
         status.activePartType ?? '',
         status.activeToolName ?? '',
         status.statusText,
-        status.isGenericStatus ? '1' : '0',
     ].join(STATUS_SIGNATURE_SEPARATOR);
 };
 
 const decodeParsedStatus = (signature: string): ParsedStatusResult => {
-    const [activePartType, activeToolName, statusText = 'working', isGenericStatus] = signature.split(STATUS_SIGNATURE_SEPARATOR);
+    const [activePartType, activeToolName, statusText = 'working'] = signature.split(STATUS_SIGNATURE_SEPARATOR);
     return {
         activePartType: activePartType === 'text' || activePartType === 'tool' || activePartType === 'reasoning' || activePartType === 'editing'
             ? activePartType
             : undefined,
         activeToolName: activeToolName || undefined,
         statusText,
-        isGenericStatus: isGenericStatus === '1',
     };
 };
 
@@ -402,7 +396,6 @@ export function useAssistantStatus(): AssistantStatusSnapshot {
             isCooldown,
             lifecyclePhase: isStreaming ? 'streaming' : isCooldown ? 'cooldown' : null,
             statusText: isWorking ? parsedStatus.statusText : null,
-            isGenericStatus: isWorking ? parsedStatus.isGenericStatus : true,
             isWaitingForPermission: false,
             canAbort: isWorking,
             compactionDeadline: null,

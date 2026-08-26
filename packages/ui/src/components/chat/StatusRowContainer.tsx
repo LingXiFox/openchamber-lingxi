@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { useAgentActivity } from '@/hooks/useAgentActivity';
 import { useAssistantStatus } from '@/hooks/useAssistantStatus';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { getProviderModelDisplayName } from '@/lib/modelDisplay';
@@ -12,6 +13,7 @@ import { StatusRow } from './StatusRow';
  */
 export const StatusRowContainer: React.FC = React.memo(() => {
     const { activeModel, working } = useAssistantStatus();
+    const activity = useAgentActivity();
     const currentAgentName = useConfigStore((state) => state.currentAgentName);
     const providers = useConfigStore((state) => state.providers);
 
@@ -29,13 +31,13 @@ export const StatusRowContainer: React.FC = React.memo(() => {
         <StatusRow
             isWorking={working.isWorking}
             statusText={working.statusText}
-            isGenericStatus={working.isGenericStatus}
             isWaitingForPermission={working.isWaitingForPermission}
             abortActive={working.abortActive}
             retryInfo={working.retryInfo}
             agentName={currentAgentName}
             modelName={modelDisplayName}
             providerId={activeModel?.providerId ?? null}
+            activity={activity}
         />
     );
 });
