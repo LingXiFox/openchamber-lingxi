@@ -78,6 +78,12 @@ That runs, in order:
 4. `rebuild:native` to rebuild native modules for Electron.
 5. `package.mjs` to run `electron-builder`; its `afterPack` hook stages the compiled macOS icon asset catalog.
 
+The macOS `afterPack` hook also writes `Contents/Resources/app-update.yml`
+from the active electron-builder `publish` configuration and computed updater
+cache name. Run `verify:app-update` against the `.app` after packaging and
+signing, then against the final ZIP. A missing or mismatched file blocks the
+release.
+
 Build output goes to `packages/electron/dist`.
 
 macOS builds produce `dmg` and `zip` artifacts. Windows builds produce an NSIS installer. Linux builds produce an AppImage for the native x64 or arm64 host.
