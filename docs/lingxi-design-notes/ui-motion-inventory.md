@@ -1,7 +1,7 @@
 # OpenChamber-LingXi UI motion inventory
 
-Status: Phase 0-2 implemented  
-Inventory date: 2026-08-25  
+Status: Phase 0-2 implemented
+Inventory date: 2026-08-25
 Implementation status: semantic tokens, one-shot draft reveals, per-character motion removal, and shared overlay presence are implemented without new dependencies.
 
 ## 1. Scope
