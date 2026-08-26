@@ -3,6 +3,15 @@ import { settingsDict } from './uk.settings';
 
 export const dict: Record<I18nKey, string> = {
   ...settingsDict,
+  'chat.statusRow.activity.connecting': 'Підключення',
+  'chat.statusRow.activity.retrying': 'Повторна спроба',
+  'chat.statusRow.activity.listening': 'Прослуховування',
+  'chat.statusRow.activity.working': 'Робота',
+  'chat.statusRow.activity.searching': 'Пошук',
+  'chat.statusRow.activity.reasoning': 'Міркування',
+  'chat.statusRow.activity.composing': 'Формування відповіді',
+  'chat.statusRow.activity.editing': 'Редагування',
+  'chat.statusRow.activity.orchestrating': 'Делегування завдання',
   'terminalView.actions.attachSelection': 'Прикріпити вибраний вивід',
   'terminalView.actions.restart': 'Перезапустити термінал',
   'chat.message.terminalContext': '{terminal}, рядки {start}-{end}',

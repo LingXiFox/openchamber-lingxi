@@ -11,6 +11,7 @@ type TodoPriority = string;
 import { useUIStore } from "@/stores/useUIStore";
 import { useTodosPersistStore } from "@/stores/useTodosPersistStore";
 import { WorkingPlaceholder } from "./message/parts/WorkingPlaceholder";
+import type { AgentActivity } from "@/lib/agent-activity";
 import { isVSCodeRuntime } from "@/lib/desktop";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Icon } from "@/components/icon/Icon";
@@ -120,7 +121,6 @@ interface StatusRowProps {
   // Working state
   isWorking?: boolean;
   statusText?: string | null;
-  isGenericStatus?: boolean;
   isWaitingForPermission?: boolean;
   wasAborted?: boolean;
   abortActive?: boolean;
@@ -136,12 +136,12 @@ interface StatusRowProps {
   modelName?: string | null;
   providerId?: string | null;
   leftAccessory?: React.ReactNode;
+  activity?: AgentActivity | null;
 }
 
 export const StatusRow: React.FC<StatusRowProps> = ({
   isWorking = false,
   statusText = null,
-  isGenericStatus,
   isWaitingForPermission,
   wasAborted,
   abortActive,
@@ -155,6 +155,7 @@ export const StatusRow: React.FC<StatusRowProps> = ({
   modelName,
   providerId,
   leftAccessory,
+  activity,
 }) => {
   const { t } = useI18n();
   const [isExpanded, setIsExpanded] = React.useState(false);
@@ -219,8 +220,9 @@ export const StatusRow: React.FC<StatusRowProps> = ({
   }, [visibleTodos]);
 
   const hasTodoContent = showTodos && statusSummary.left > 0;
+  const hasSemanticActivity = activity === undefined || (activity !== 'idle' && activity !== 'blocked');
   const hasAssistantContent = showAssistantStatus && (
-    isWorking ||
+    (isWorking && hasSemanticActivity) ||
     Boolean(wasAborted) ||
     Boolean(showAbortStatus)
   );
@@ -316,9 +318,9 @@ export const StatusRow: React.FC<StatusRowProps> = ({
       className={cn("mb-6", !hasLeftAccessory && "chat-column")}
       style={STATUS_ROW_CONTAINER_STYLE}
     >
-      {/* h-8 matches the turn footer's real row height: its h-8 action
-          buttons define the footer line, with the meta text centered in it. */}
-      <div className={cn("flex items-center justify-between gap-2 h-8", hasLeftAccessory && "px-0.5")}>
+      {/* min-h-8 preserves the footer baseline while the active 64px orb may
+          expand the row without constraining settled or todo-only states. */}
+      <div className={cn("flex min-h-8 items-center justify-between gap-2", hasLeftAccessory && "px-0.5")}>
         {/* Left: Abort status | Working placeholder | leftAccessory */}
         <div className={cn("flex-1 flex items-center min-w-0 gap-2", hasLeftAccessory ? "pl-1.5" : "overflow-x-hidden")}>
           {showAssistantStatus && showAbortStatus ? (
@@ -333,12 +335,12 @@ export const StatusRow: React.FC<StatusRowProps> = ({
               key={currentSessionId ?? "no-session"}
               isWorking={isWorking}
               statusText={statusText}
-              isGenericStatus={isGenericStatus}
               isWaitingForPermission={isWaitingForPermission}
               retryInfo={retryInfo}
               agentName={agentName}
               modelName={modelName}
               providerId={providerId}
+              activity={activity}
             />
           ) : leftAccessory ? (
             leftAccessory

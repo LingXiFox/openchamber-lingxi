@@ -1,12 +1,13 @@
 import React from 'react';
 import { animate, type AnimationPlaybackControls } from 'motion';
+import { ThinkingOrb } from 'thinking-orbs';
 import type { Part } from '@opencode-ai/sdk/v2';
 import { cn } from '@/lib/utils';
 import type { ContentChangeReason } from '@/hooks/useChatAutoFollow';
 import { ScrollableOverlay } from '@/components/ui/ScrollableOverlay';
 import { Icon } from '@/components/icon/Icon';
-import { BusyDots } from './BusyDots';
 import { useI18n } from '@/lib/i18n';
+import { REASONING_ORB_STATE } from '@/lib/agent-activity-orb';
 import { useUIStore } from '@/stores/useUIStore';
 import { MarkdownRenderer } from '../../MarkdownRenderer';
 import { useStreamingTextThrottle } from '../../hooks/useStreamingTextThrottle';
@@ -109,6 +110,7 @@ export const ReasoningTimelineBlock: React.FC<ReasoningTimelineBlockProps> = ({
     const { t } = useI18n();
     const hasEnded = typeof time?.end === 'number';
     const canAutoExpand = isStreaming && !hasEnded;
+    const isReasoningActive = variant === 'thinking' && isStreaming && !hasEnded;
     const [expansion, setExpansion] = React.useState<ExpansionState>(() => {
         if (defaultExpanded === true) {
             return { expanded: true, source: 'user' };
@@ -351,7 +353,15 @@ export const ReasoningTimelineBlock: React.FC<ReasoningTimelineBlockProps> = ({
                     {isStreaming ? (
                         <span className={cn('flex items-center gap-1', TOOL_ROW_TITLE_CLASS)} style={{ color: 'var(--tools-title)' }}>
                             <span>{t(variant === 'justification' ? 'chat.reasoningTrace.justification' : 'chat.reasoningTrace.thinking')}</span>
-                            <BusyDots />
+                            {isReasoningActive && isExpanded ? (
+                                <span
+                                    className="inline-flex h-5 w-5 shrink-0 items-center justify-center"
+                                    aria-hidden="true"
+                                    data-reasoning-context-orb="true"
+                                >
+                                    <ThinkingOrb state={REASONING_ORB_STATE} size={20} />
+                                </span>
+                            ) : null}
                         </span>
                     ) : isExpanded ? (
                         <span
