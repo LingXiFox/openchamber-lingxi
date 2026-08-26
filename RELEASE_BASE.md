@@ -247,10 +247,10 @@ Current validated arm64 artifacts:
 
 ~~~text
 OpenChamber-LingXiFox-1.0.0-mac-arm64.dmg
-size: 210882712 bytes
+size: 210881238 bytes
 
 OpenChamber-LingXiFox-1.0.0-mac-arm64.zip
-size: 203373919 bytes
+size: 203373969 bytes
 
 latest-mac.yml
 size: 551 bytes
@@ -268,27 +268,27 @@ OpenChamber-LingXiFox-1.0.0-mac-arm64.zip
 with SHA-512:
 
 ~~~text
-Uq4qXbkI+K770fnM8tCQg14e656x7iKd3RMdLTIQSVJSd+yKcpS6gO5AN/TdJjSWQ4OayOTmq9AIgvARxGTP8w==
+B88jt/tYGF/i0wAKrwhdQadtYF0GQM3nUAUO5y1fJNQ4aBi6ny+cbmn1tz/VsubmUKFkMElCOV946W8IXtJCAw==
 ~~~
 
 and byte size:
 
 ~~~text
-203373919
+203373969
 ~~~
 
 The corresponding DMG SHA-512 is:
 
 ~~~text
-xZoFfhTP+xza0dZJIr2z2gCSaBFagb4qHfrwpm0Qj3s7kt54V9gXkVaqNfqoDUPuNMqIn4zBNwKEu/C001by7Q==
+6heMm1RRDOCy/KTrYqUj8uk/8sy4J4SyBYdMqH0RZH6OGaFW416uROANiNJqCDQYmFcDA23oOvF1s/eCC3Jlew==
 ~~~
 
 The SHA-256 release checksums are:
 
 ~~~text
-c279e97519d87fd24e2a3631bdb744461c33bdde9e1e6dd5b197b06a149e6591  OpenChamber-LingXiFox-1.0.0-mac-arm64.dmg
-3074747eda6a1c0885387d1eb7707d3060af4e365beec26ad91533b5b9e997a7  OpenChamber-LingXiFox-1.0.0-mac-arm64.zip
-e8457e843317c79b6342566a70fb72c14402efebcd5a38420968720afe906e46  latest-mac.yml
+86727a386bdbf41b2ce55ef39170591e1984a27f486cca447b0bc05ec9832683  OpenChamber-LingXiFox-1.0.0-mac-arm64.dmg
+4ba2e2b24fa5472b19010be7e0013c8dd500a6ea95316d0735a5e15c988ce47d  OpenChamber-LingXiFox-1.0.0-mac-arm64.zip
+14d5ff82f85228d47320ae2862850c21479a741521ae30444b082676232827a1  latest-mac.yml
 ~~~
 
 The DMG and ZIP application copies have been verified with strict codesign
