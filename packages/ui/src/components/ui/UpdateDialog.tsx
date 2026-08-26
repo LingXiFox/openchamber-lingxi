@@ -31,7 +31,7 @@ interface UpdateDialogProps {
   runtimeType?: 'desktop' | 'web' | 'vscode' | 'mobile' | null;
 }
 
-const GITHUB_RELEASES_URL = 'https://github.com/openchamber/openchamber/releases';
+const GITHUB_RELEASES_URL = 'https://github.com/LingXiFox/openchamber-lingxi/releases';
 
 type ChangelogSection = {
   version: string;
@@ -207,9 +207,7 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
   const [webUpdateState, setWebUpdateState] = useState<WebUpdateState>('idle');
   const [webError, setWebError] = useState<string | null>(null);
 
-  const releaseUrl = info?.version
-    ? (info.releaseUrl || `${GITHUB_RELEASES_URL}/tag/v${info.version}`)
-    : GITHUB_RELEASES_URL;
+  const releaseUrl = info?.releaseUrl || GITHUB_RELEASES_URL;
   const mobileUpdateUrl = info?.downloadUrl || releaseUrl;
 
   const progressPercent = progress?.total
