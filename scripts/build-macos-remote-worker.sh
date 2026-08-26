@@ -139,6 +139,7 @@ fi
 [[ -d "$APP_PATH" ]] || fail "packaged app not found: $APP_PATH"
 
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+"$NODE_HOME/bin/node" "$SOURCE/packages/electron/scripts/verify-app-update.mjs" "$APP_PATH"
 SIGN_INFO="$(codesign -dvvv "$APP_PATH" 2>&1)"
 [[ "$SIGN_INFO" == *"Authority=$SIGNING_IDENTITY"* ]] || fail 'unexpected signing authority'
 [[ "$SIGN_INFO" =~ flags=.*runtime ]] || fail 'hardened runtime flag missing'
@@ -149,7 +150,10 @@ for artifact in "$SOURCE"/packages/electron/dist/*.dmg \
   "$SOURCE"/packages/electron/dist/*.zip \
   "$SOURCE"/packages/electron/dist/*.blockmap \
   "$SOURCE"/packages/electron/dist/latest-mac.yml; do
-  [[ -f "$artifact" ]] && cp "$artifact" "$ARTIFACTS/"
+  if [[ -f "$artifact" ]]; then
+    [[ "$artifact" == *.zip ]] && "$NODE_HOME/bin/node" "$SOURCE/packages/electron/scripts/verify-app-update.mjs" "$artifact"
+    cp "$artifact" "$ARTIFACTS/"
+  fi
 done
 printf '%s\n' "$SIGN_INFO" > "$ARTIFACTS/codesign.txt"
 printf '[macos-worker] signed artifacts ready: %s\n' "$ARTIFACTS"
