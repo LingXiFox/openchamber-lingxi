@@ -201,7 +201,10 @@ jobs:
             for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
               const file = path.join(directory, entry.name);
               if (entry.isDirectory()) visit(file);
-              else if (entry.isFile() && entry.name.endsWith('.node')) modules.push(file);
+              else if (entry.isFile() && entry.name.endsWith('.node')) {
+                const normalized = file.split(path.sep).join('/');
+                if (!normalized.includes('/prebuilds/') || normalized.includes('/prebuilds/win32-x64/')) modules.push(file);
+              }
             }
           };
           visit(root);
@@ -316,7 +319,7 @@ jobs:
             XDG_CACHE_HOME="$runtime/home/.cache" \
             OPENCHAMBER_DATA_DIR="$runtime/data" \
             APPIMAGE_EXTRACT_AND_RUN=1 \
-            "${appimages[0]}" --user-data-dir="$runtime/electron-user-data"
+            "${appimages[0]}" --no-sandbox --user-data-dir="$runtime/electron-user-data"
           status=$?
           set -e
           test "$status" -eq 124
