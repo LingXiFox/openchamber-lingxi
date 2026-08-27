@@ -7,7 +7,7 @@ import test from 'node:test';
 
 import YAML from 'yaml';
 
-import { artifactDigest, assertVersion, checkRepository, prepareRepository, stageArtifacts, verifyInventory } from './lingxi-release.mjs';
+import { artifactDigest, assertVersion, checkRepository, evaluateSecretAlerts, prepareRepository, stageArtifacts, verifyInventory } from './lingxi-release.mjs';
 
 const fixture = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lingxi-release-test-'));
@@ -108,4 +108,24 @@ test('rejects encoded artifact paths before staging', (context) => {
     /Unsafe artifact URL/,
   );
   assert.equal(fs.existsSync(path.join(root, 'escape.AppImage')), false);
+});
+
+test('allows only exact upstream secret baseline alerts and locations', () => {
+  const secret = 'inherited-upstream-value';
+  const baseline = [{
+    secret_type: 'Example',
+    fingerprint: `sha256:${crypto.createHash('sha256').update(secret).digest('hex')}`,
+    locations: [{ path: 'upstream.js', first_introduced_commit: 'abc123' }],
+  }];
+  const inherited = { secret_type: 'Example', secret, locations: [{ path: 'upstream.js', first_introduced_commit: 'abc123' }] };
+  const moved = { secret_type: 'Example', secret, locations: [{ path: 'lingxi.js', first_introduced_commit: 'def456' }] };
+  const reintroduced = { secret_type: 'Example', secret, locations: [{ path: 'upstream.js', first_introduced_commit: 'def456' }] };
+  const extraLocation = { ...inherited, locations: [...inherited.locations, ...moved.locations] };
+
+  assert.deepEqual(evaluateSecretAlerts(baseline, [inherited]), { inherited: [inherited], unreviewed: [] });
+  assert.deepEqual(evaluateSecretAlerts(baseline, [inherited, moved]), { inherited: [inherited], unreviewed: [moved] });
+  assert.deepEqual(evaluateSecretAlerts(baseline, [reintroduced, extraLocation]), {
+    inherited: [],
+    unreviewed: [reintroduced, extraLocation],
+  });
 });

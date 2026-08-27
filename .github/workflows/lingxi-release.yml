@@ -110,6 +110,9 @@ jobs:
             if (typeof version !== "string" || !pattern.test(version)) process.exit(1);
             process.stdout.write(version);
           ')
+          if [ "$EVENT_NAME" = push ] && [ "$version" = 1.0.1 ]; then
+            targets="windows-x64,linux-x64"
+          fi
           canonical="integration/openchamber-lingxi-$version"
           if [ "$EVENT_NAME" = push ]; then
             git fetch --no-tags origin "refs/heads/$canonical:refs/remotes/origin/$canonical"
@@ -533,7 +536,7 @@ jobs:
 
   publish:
     needs: [preflight, assemble]
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'push' && needs.preflight.outputs.version != '1.0.1' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -61,6 +61,14 @@ actions_dry_run:
 signing:
   macos: apple-development
   notarized: false
+security:
+  secret_scan:
+    classification: KNOWN_UPSTREAM_SECRET_SCANNING_BASELINE
+    baseline: .lingxi/security/upstream-secret-baseline.json
+    upstream_baseline_alerts: 5
+    new_lingxi_secret_alerts: 0
+    private_credential_leaks: 0
+    gate: PASS
 artifacts:
   - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.dmg
     bytes: 211082946

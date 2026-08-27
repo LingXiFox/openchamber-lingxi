@@ -87,6 +87,7 @@
     "release:lingxi:prepare": "node scripts/release/lingxi-release.mjs prepare",
     "release:lingxi:check": "node scripts/release/lingxi-release.mjs check --record",
     "release:lingxi:parity": "node scripts/release/lingxi-release.mjs parity",
+    "release:lingxi:secret-gate": "node scripts/release/lingxi-release.mjs secret-gate LingXiFox/openchamber-lingxi",
     "release:prepare": "bun run build && bun run type-check && bun run lint",
     "release:test": "./scripts/test-release-build.sh",
     "release:test:intel": "./scripts/test-release-build.sh x86_64",
