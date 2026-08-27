@@ -1,0 +1,561 @@
+name: LingXi Desktop Release
+
+on:
+  push:
+    tags:
+      - "lingxi-v*"
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact branch, tag, or commit to build
+        required: true
+        type: string
+      dry_run:
+        description: Build Actions artifacts without publishing
+        required: true
+        default: true
+        type: boolean
+      targets:
+        description: "Comma-separated targets: windows-x64,linux-x64,macos-arm64"
+        required: true
+        default: windows-x64,linux-x64
+        type: string
+      retention_days:
+        description: Dry-run artifact retention
+        required: true
+        default: "7"
+        type: choice
+        options: ["1", "3", "7", "14"]
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: 1.3.14
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+      targets: ${{ steps.plan.outputs.targets }}
+      retention_days: ${{ steps.plan.outputs.retention_days }}
+    steps:
+      - name: Resolve immutable build input
+        id: input
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TAG_REF: ${{ github.ref }}
+          MANUAL_REF: ${{ inputs.source_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = push ]; then
+            echo "source_ref=$TAG_REF" >> "$GITHUB_OUTPUT"
+          else
+            echo "source_ref=$MANUAL_REF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout Build Source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.input.outputs.source_ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Record immutable source
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+
+      # Keep this before dependency installation or repository scripts. These
+      # outputs decide whether the secret-bearing macOS job can run.
+      - name: Resolve release plan
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_INPUT: ${{ steps.input.outputs.source_ref }}
+          MANUAL_DRY_RUN: ${{ inputs.dry_run }}
+          MANUAL_TARGETS: ${{ inputs.targets }}
+          MANUAL_RETENTION: ${{ inputs.retention_days }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = push ]; then
+            targets="windows-x64,linux-x64,macos-arm64"
+            retention=7
+          else
+            test "$MANUAL_DRY_RUN" = true || { echo "Manual runs must use dry_run=true" >&2; exit 1; }
+            targets="$MANUAL_TARGETS"
+            retention="$MANUAL_RETENTION"
+          fi
+          targets=$(node -e '
+            const allowed = new Set(["windows-x64", "linux-x64", "macos-arm64"]);
+            const targets = process.argv[1].split(",").map((value) => value.trim()).filter(Boolean);
+            if (!targets.length || new Set(targets).size !== targets.length || targets.some((target) => !allowed.has(target))) process.exit(1);
+            process.stdout.write(targets.join(","));
+          ' "$targets")
+          version=$(node -e '
+            const fs = require("node:fs");
+            const version = JSON.parse(fs.readFileSync("packages/electron/package.json", "utf8")).version;
+            const pattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+            if (typeof version !== "string" || !pattern.test(version)) process.exit(1);
+            process.stdout.write(version);
+          ')
+          canonical="integration/openchamber-lingxi-$version"
+          if [ "$EVENT_NAME" = push ]; then
+            canonical_ref="origin/$canonical"
+            git show-ref --verify --quiet "refs/remotes/$canonical_ref" || canonical_ref="$canonical"
+            git merge-base --is-ancestor HEAD "$canonical_ref" || {
+              echo "Release tag must point at a commit on the canonical $canonical branch" >&2
+              exit 1
+            }
+          elif [[ ",$targets," == *",macos-arm64,"* ]]; then
+            case "$SOURCE_INPUT" in
+              "$canonical"|"refs/heads/$canonical") ;;
+              *) echo "macos-arm64 dry-runs must use the canonical $canonical branch" >&2; exit 1 ;;
+            esac
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+          echo "retention_days=$retention" >> "$GITHUB_OUTPUT"
+
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Validate release contract
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = push ]; then
+            node scripts/release/lingxi-release.mjs check --record --tag "$REF_NAME"
+          else
+            node scripts/release/lingxi-release.mjs check --record
+          fi
+
+      - name: Run source checks
+        run: |
+          bun run release:prepare
+          bun run test
+
+      - name: Confirm preflight did not mutate Build Source
+        run: git diff --exit-code
+
+  windows-x64:
+    needs: preflight
+    if: ${{ contains(format(',{0},', needs.preflight.outputs.targets), ',windows-x64,') }}
+    runs-on: windows-2022
+    outputs:
+      artifact_digest: ${{ steps.artifact.outputs.digest }}
+    env:
+      ELECTRON_BUILDER_ARCH: x64
+      OPENCHAMBER_TARGET_ARCH: x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Build native Windows installer
+        working-directory: packages/electron
+        run: |
+          bun run build:web-assets
+          bun run prepare:opencode-cli
+          bun run verify:opencode-cli
+          bun run bundle:main
+          bun run rebuild:native
+          node ./scripts/package.mjs --win --x64 --publish=never
+          bun run verify:opencode-cli:packaged
+      - name: Verify packaged native modules
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = path.resolve('packages/electron/dist/win-unpacked/resources/app.asar.unpacked/node_modules');
+          const modules = [];
+          const visit = (directory) => {
+            for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+              const file = path.join(directory, entry.name);
+              if (entry.isDirectory()) visit(file);
+              else if (entry.isFile() && entry.name.endsWith('.node')) modules.push(file);
+            }
+          };
+          visit(root);
+          for (const required of ['pty.node', 'sherpa-onnx.node']) {
+            if (!modules.some((file) => path.basename(file) === required)) throw new Error(`Missing packaged native module: ${required}`);
+          }
+          for (const file of modules) {
+            const bytes = fs.readFileSync(file);
+            const pe = bytes.readUInt32LE(0x3c);
+            if (bytes.subarray(0, 2).toString('ascii') !== 'MZ' || bytes.subarray(pe, pe + 4).toString('hex') !== '50450000' || bytes.readUInt16LE(pe + 4) !== 0x8664) {
+              throw new Error(`Expected Windows x64 PE module: ${file}`);
+            }
+          }
+          console.log(`Verified ${modules.length} Windows x64 native modules.`);
+          NODE
+      - name: Smoke unpacked Windows app
+        shell: pwsh
+        run: |
+          $apps = @(Get-ChildItem "packages/electron/dist/win-unpacked" -File -Filter "*.exe")
+          if ($apps.Count -ne 1) { throw "Expected one unpacked app executable, found $($apps.Count)" }
+          $runtime = Join-Path $env:RUNNER_TEMP "openchamber-windows-smoke"
+          $env:HOME = Join-Path $runtime "home"
+          $env:APPDATA = Join-Path $runtime "appdata"
+          $env:LOCALAPPDATA = Join-Path $runtime "localappdata"
+          $env:OPENCHAMBER_DATA_DIR = Join-Path $runtime "data"
+          $userData = Join-Path $runtime "electron-user-data"
+          New-Item -ItemType Directory -Force $env:HOME, $env:APPDATA, $env:LOCALAPPDATA, $env:OPENCHAMBER_DATA_DIR, $userData | Out-Null
+          $process = Start-Process -FilePath $apps[0].FullName -ArgumentList "--user-data-dir=`"$userData`"" -PassThru
+          try {
+            Start-Sleep -Seconds 15
+            if ($process.HasExited) { throw "Unpacked Windows app exited during smoke test with code $($process.ExitCode)" }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+      - name: Stage updater artifacts
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: node scripts/release/lingxi-release.mjs stage windows packages/electron/dist release-artifacts "$VERSION"
+      - name: Record staged artifact digest
+        id: artifact
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          digest=$(node scripts/release/lingxi-release.mjs digest windows release-artifacts "$VERSION")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Confirm Build Source remains unchanged
+        run: git diff --exit-code
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lingxi-${{ needs.preflight.outputs.version }}-windows-x64
+          path: release-artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ fromJSON(needs.preflight.outputs.retention_days) }}
+
+  linux-x64:
+    needs: preflight
+    if: ${{ contains(format(',{0},', needs.preflight.outputs.targets), ',linux-x64,') }}
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact_digest: ${{ steps.artifact.outputs.digest }}
+    env:
+      ELECTRON_BUILDER_ARCH: x64
+      OPENCHAMBER_TARGET_ARCH: x64
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+      - name: Verify native host
+        run: |
+          test "$(uname -m)" = x86_64
+          test "$(node -p 'process.arch')" = x64
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Run focused Electron release tests
+        working-directory: packages/electron
+        run: |
+          bun run test:architecture
+          bun run test:updater
+      - name: Build native Linux AppImage
+        working-directory: packages/electron
+        run: |
+          bun run build:web-assets
+          bun run prepare:opencode-cli
+          bun run verify:opencode-cli
+          bun run bundle:main
+          bun run rebuild:native
+          node ./scripts/package.mjs --linux --x64 --publish=never
+          bun run verify:opencode-cli:packaged
+          bun run verify:linux-appimage
+      - name: Smoke Linux AppImage
+        working-directory: packages/electron
+        run: |
+          set -euo pipefail
+          appimages=(dist/*.AppImage)
+          test "${#appimages[@]}" -eq 1
+          runtime="$RUNNER_TEMP/openchamber-linux-smoke"
+          mkdir -p "$runtime/home/.config" "$runtime/home/.local/share" "$runtime/home/.cache" "$runtime/data" "$runtime/electron-user-data"
+          set +e
+          timeout --kill-after=5s 20s xvfb-run -a env \
+            HOME="$runtime/home" \
+            XDG_CONFIG_HOME="$runtime/home/.config" \
+            XDG_DATA_HOME="$runtime/home/.local/share" \
+            XDG_CACHE_HOME="$runtime/home/.cache" \
+            OPENCHAMBER_DATA_DIR="$runtime/data" \
+            APPIMAGE_EXTRACT_AND_RUN=1 \
+            "${appimages[0]}" --user-data-dir="$runtime/electron-user-data"
+          status=$?
+          set -e
+          test "$status" -eq 124
+      - name: Stage updater artifacts
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: node scripts/release/lingxi-release.mjs stage linux packages/electron/dist release-artifacts "$VERSION"
+      - name: Record staged artifact digest
+        id: artifact
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          digest=$(node scripts/release/lingxi-release.mjs digest linux release-artifacts "$VERSION")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Confirm Build Source remains unchanged
+        run: git diff --exit-code
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lingxi-${{ needs.preflight.outputs.version }}-linux-x64
+          path: release-artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ fromJSON(needs.preflight.outputs.retention_days) }}
+
+  macos-arm64:
+    needs: preflight
+    if: ${{ contains(format(',{0},', needs.preflight.outputs.targets), ',macos-arm64,') }}
+    runs-on: macos-26
+    outputs:
+      artifact_digest: ${{ steps.artifact.outputs.digest }}
+    environment: lingxi-release
+    env:
+      ELECTRON_BUILDER_ARCH: arm64
+      OPENCHAMBER_TARGET_ARCH: arm64
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+      - name: Verify native host
+        run: |
+          test "$(uname -m)" = arm64
+          test "$(node -p 'process.arch')" = arm64
+      - name: Verify signing secrets
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          test -n "$APPLE_CERTIFICATE"
+          test -n "$APPLE_CERTIFICATE_PASSWORD"
+          test -n "$APPLE_ID"
+          test -n "$APPLE_PASSWORD"
+          test -n "$APPLE_TEAM_ID"
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Install Apple certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/lingxi-signing.keychain-db"
+          certificate="$RUNNER_TEMP/lingxi-certificate.p12"
+          trap 'rm -f "$certificate"' EXIT
+          password=$(openssl rand -base64 32)
+          echo "::add-mask::$password"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -D > "$certificate"
+          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security list-keychain -d user -s "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain"
+      - name: Build signed and notarized macOS artifacts
+        working-directory: packages/electron
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          bun run build:web-assets
+          bun run prepare:opencode-cli
+          bun run verify:opencode-cli
+          bun run bundle:main
+          bun run rebuild:native
+          node ./scripts/package.mjs --mac --arm64 --publish=never
+          bun run verify:opencode-cli:packaged
+      - name: Verify signing, updater configuration, and notarization
+        run: |
+          set -euo pipefail
+          app=$(find packages/electron/dist/mac-arm64 -maxdepth 2 -name '*.app' -print -quit)
+          dmg=$(find packages/electron/dist -maxdepth 1 -name '*.dmg' -print -quit)
+          zip=$(find packages/electron/dist -maxdepth 1 -name '*.zip' -print -quit)
+          test -n "$app"
+          test -n "$dmg"
+          test -n "$zip"
+          codesign --verify --deep --strict --verbose=4 "$app"
+          codesign --verify --verbose=4 "$dmg"
+          codesign -d --entitlements :- "$app" > "$RUNNER_TEMP/entitlements.plist" 2>&1
+          grep -q 'com.apple.security.cs.disable-library-validation' "$RUNNER_TEMP/entitlements.plist"
+          xcrun stapler validate "$app"
+          xcrun stapler validate "$dmg"
+          node packages/electron/scripts/verify-app-update.mjs "$app"
+          node packages/electron/scripts/verify-app-update.mjs "$zip"
+      - name: Smoke packaged macOS app
+        run: |
+          set -euo pipefail
+          app=$(find packages/electron/dist/mac-arm64 -maxdepth 2 -name '*.app' -print -quit)
+          executable="$app/Contents/MacOS/OpenChamber LingXiFox"
+          test -x "$executable"
+          runtime="$RUNNER_TEMP/openchamber-macos-smoke"
+          mkdir -p "$runtime/home/.config" "$runtime/home/.local/share" "$runtime/home/.cache" "$runtime/data" "$runtime/electron-user-data"
+          env \
+            HOME="$runtime/home" \
+            XDG_CONFIG_HOME="$runtime/home/.config" \
+            XDG_DATA_HOME="$runtime/home/.local/share" \
+            XDG_CACHE_HOME="$runtime/home/.cache" \
+            OPENCHAMBER_DATA_DIR="$runtime/data" \
+            "$executable" --user-data-dir="$runtime/electron-user-data" &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          sleep 15
+          kill -0 "$pid"
+      - name: Stage updater artifacts
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: node scripts/release/lingxi-release.mjs stage macos packages/electron/dist release-artifacts "$VERSION"
+      - name: Record staged artifact digest
+        id: artifact
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          digest=$(node scripts/release/lingxi-release.mjs digest macos release-artifacts "$VERSION")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Confirm Build Source remains unchanged
+        run: git diff --exit-code
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lingxi-${{ needs.preflight.outputs.version }}-macos-arm64
+          path: release-artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ fromJSON(needs.preflight.outputs.retention_days) }}
+      - name: Remove signing keychain
+        if: ${{ always() }}
+        run: security delete-keychain "$RUNNER_TEMP/lingxi-signing.keychain-db" || true
+
+  assemble:
+    needs: [preflight, windows-x64, linux-x64, macos-arm64]
+    if: ${{ always() && needs.preflight.result == 'success' && (!contains(format(',{0},', needs.preflight.outputs.targets), ',windows-x64,') || needs.windows-x64.result == 'success') && (!contains(format(',{0},', needs.preflight.outputs.targets), ',linux-x64,') || needs.linux-x64.result == 'success') && (!contains(format(',{0},', needs.preflight.outputs.targets), ',macos-arm64,') || needs.macos-arm64.result == 'success') }}
+    runs-on: ubuntu-24.04
+    outputs:
+      checksum_digest: ${{ steps.release.outputs.checksum_digest }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+      - name: Download native artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: lingxi-${{ needs.preflight.outputs.version }}-*
+          path: release-artifacts
+          merge-multiple: true
+      - name: Verify artifact round trips and write checksums
+        id: release
+        env:
+          TARGETS: ${{ needs.preflight.outputs.targets }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+          WINDOWS_DIGEST: ${{ needs.windows-x64.outputs.artifact_digest }}
+          LINUX_DIGEST: ${{ needs.linux-x64.outputs.artifact_digest }}
+          MACOS_DIGEST: ${{ needs.macos-arm64.outputs.artifact_digest }}
+        run: |
+          set -euo pipefail
+          verify_digest() {
+            local target=$1 platform=$2 expected=$3 actual
+            [[ ",$TARGETS," == *",$target,"* ]] || return 0
+            test -n "$expected"
+            actual=$(node scripts/release/lingxi-release.mjs digest "$platform" release-artifacts "$VERSION")
+            test "$actual" = "$expected" || { echo "$target artifact digest changed after download" >&2; exit 1; }
+          }
+          verify_digest windows-x64 windows "$WINDOWS_DIGEST"
+          verify_digest linux-x64 linux "$LINUX_DIGEST"
+          verify_digest macos-arm64 macos "$MACOS_DIGEST"
+          node scripts/release/lingxi-release.mjs inventory release-artifacts "$TARGETS" "$VERSION"
+          echo "checksum_digest=$(sha256sum release-artifacts/SHA256SUMS.txt | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Upload assembled release
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lingxi-${{ needs.preflight.outputs.version }}-release
+          path: release-artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ fromJSON(needs.preflight.outputs.retention_days) }}
+
+  publish:
+    needs: [preflight, assemble]
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.preflight.outputs.source_sha }}
+          persist-credentials: false
+      - name: Download assembled release
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: lingxi-${{ needs.preflight.outputs.version }}-release
+          path: release-artifacts
+      - name: Verify assembled artifact round trip
+        env:
+          EXPECTED_CHECKSUM_DIGEST: ${{ needs.assemble.outputs.checksum_digest }}
+        run: |
+          set -euo pipefail
+          actual=$(sha256sum release-artifacts/SHA256SUMS.txt | cut -d ' ' -f 1)
+          test "$actual" = "$EXPECTED_CHECKSUM_DIGEST"
+          (cd release-artifacts && sha256sum --check SHA256SUMS.txt)
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const actual = fs.readdirSync('release-artifacts').filter((name) => name !== 'SHA256SUMS.txt').sort();
+          const listed = fs.readFileSync('release-artifacts/SHA256SUMS.txt', 'utf8').trim().split('\n').map((line) => line.slice(line.indexOf('  ') + 2)).sort();
+          if (actual.join('\n') !== listed.join('\n')) throw new Error('Assembled release contains files not covered by SHA256SUMS.txt');
+          NODE
+      - name: Publish verified GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: OpenChamber LingXiFox ${{ needs.preflight.outputs.version }}
+          body_path: docs/releases/${{ needs.preflight.outputs.version }}.md
+          draft: false
+          prerelease: ${{ contains(needs.preflight.outputs.version, '-') }}
+          fail_on_unmatched_files: true
+          files: release-artifacts/*
