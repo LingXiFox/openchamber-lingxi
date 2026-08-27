@@ -4,7 +4,7 @@ product:
   app_id: com.lingxifox.openchamber
 version: 1.0.1
 tag: lingxi-v1.0.1
-state: ready
+state: published
 upstream:
   tag: v1.21.0
   commit: ad7fd356339ccc5c9af5af1a6786662572d53ed0
@@ -69,6 +69,59 @@ security:
     new_lingxi_secret_alerts: 0
     private_credential_leaks: 0
     gate: PASS
+formal_release:
+  run_id: 33074561221
+  run_url: https://github.com/LingXiFox/openchamber-lingxi/actions/runs/33074561221
+  build_source_commit: fe5688c69377c26c64ae0a322b333243399aa19f
+  build_source_tree: 1dcc2d5be1a135ad4902739e2ce96738bbbc9ae1
+  release_url: https://github.com/LingXiFox/openchamber-lingxi/releases/tag/lingxi-v1.0.1
+  published_at: '2026-08-27T13:37:47Z'
+  draft_round_trip: PASS
+  final_inventory: PASS
+  post_publish_docs_source:
+    workflow_run: 33077827304
+    disposition: removed-after-backup
+    backup: /Volumes/Development/ReleaseArtifacts/OpenChamber-LingXiFox/1.0.1/post-publish-extra-backup/openchamber-docs-source-fe5688c6.tar.gz
+    sha256: 9ccf28097e95a0e000821e35cb963ca07d6c557eeaf2b1ed0953389dc1f4bf22
+    prevention_pr: https://github.com/LingXiFox/openchamber-lingxi/pull/20
+  artifacts:
+    - name: OpenChamber-LingXiFox-1.0.1-linux-x86_64.AppImage
+      bytes: 223833123
+      sha256: 431556fcad3b41b739f0dca25bb2449348bd2372c6043d4c84888d528d7d6f5e
+      updater_sha512: 4gAls3C2zFpWmTJ541EnPSkllJN4tJ8mJktOBsbIbR+a9ubhlFhaLj1G5Y1xBvs7t8mQHijrPvs5KKTHnzc8Zw==
+    - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.dmg
+      bytes: 211082946
+      sha256: 1980dfd3b61e9f6597e9ba941cdd0f401e7ad65be296c74cf7284b71fb7af07b
+      updater_sha512: 4Cjjx4az/WxTVnXoTLqkDEZJsByNuXgFEG8Up2iCkmgOVplxTppvUFDVeik6W0PPasCDC8clDGO7P5ebKuOIrQ==
+    - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.dmg.blockmap
+      bytes: 223315
+      sha256: 289e8ca3978f567e479e950af084ad39aab40be659f7f3d8fbd2554f509ea554
+    - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.zip
+      bytes: 203570387
+      sha256: de0fd905dc287b64b56f35863bd5a4920c5b2416d992a1a7658c552d8edd7784
+      updater_sha512: vAAeexF1eg3SIyCd6If4AJ+/Fk1ttLQ/qy+LvzP9qwW+dOn5d5qHvPEv9ugWFp2dIWdW3etLgHTMaGSNfx0jFg==
+    - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.zip.blockmap
+      bytes: 203421
+      sha256: 223fa1453ee72db6095beb80f6bf1cecec6a19f3e26595118f48ebe4e09e9bb5
+    - name: OpenChamber-LingXiFox-1.0.1-win-x64.exe
+      bytes: 170300206
+      sha256: e9bb6ce36920a307d818ac227a69e8c4cc8908ad12372b1697fe4d308b38d231
+      updater_sha512: fzGhkZUN4UBWmnC+SYSTVo2WfCu0xwQ/Isn+82EQugxGA6I6bbU+4e4CJCE9mXpHSJZ+W+7GtoXkQX6chiQHWw==
+    - name: OpenChamber-LingXiFox-1.0.1-win-x64.exe.blockmap
+      bytes: 177474
+      sha256: c1ca6fed7f545030c3c66f8fb63892c0dc3780773e37ea58df1636edf5012b3f
+    - name: latest-linux.yml
+      bytes: 420
+      sha256: 8f91453dfd8565a3f63ca4df8c7b060f55f68dfe393954e92cec587cb80880f0
+    - name: latest-mac.yml
+      bytes: 551
+      sha256: c97ba4d68417329f3a225ad786b18e7b2e6e709d3baf30677a3ac3af00004876
+    - name: latest.yml
+      bytes: 375
+      sha256: 0f746faa7d5346dc2daa174ceee65d6d87b19d6d972b6821afb89812672f6e5d
+    - name: SHA256SUMS.txt
+      bytes: 1028
+      sha256: de2ebe8b16d880bae179aa028132780c2ab4488a0d05e1623b5e4e13a1672d3c
 artifacts:
   - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.dmg
     bytes: 211082946
