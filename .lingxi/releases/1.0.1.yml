@@ -1,0 +1,57 @@
+schema: 1
+product:
+  name: OpenChamber LingXiFox
+  app_id: com.lingxifox.openchamber
+version: 1.0.1
+tag: lingxi-v1.0.1
+state: candidate
+upstream:
+  tag: v1.21.0
+  commit: ad7fd356339ccc5c9af5af1a6786662572d53ed0
+source:
+  integration_commit: 6afd22ca6ff203980735e870737b3871b8093e60
+  integration_tree: c05e70bb49e1545664a515c8706ed79e789d66f4
+  legacy_release_commit: a83fd4cfbd51d6bacb21a134777afcf31ffbe079
+  legacy_release_tree: 9551411c3f3694a5de87a6e948377a3a6cf28b20
+  canonical_anchor_commit: 65492ce5d5e89aaf4475f309b0ca24bf4cb0300d
+  canonical_anchor_tree: a4d49eb96cade5b48254046c8b70836c4fb5a061
+  binary_attestation: absent
+migration:
+  build_relevant_tree_parity: PASS
+  compared_paths:
+    - package.json
+    - bun.lock
+    - packages/ui
+    - packages/web
+    - packages/vscode
+    - packages/electron
+    - scripts
+  note: The macOS candidate predates the canonical anchor and does not carry a build commit attestation.
+targets:
+  macos-arm64: verified-local-candidate
+  windows-x64: pending-actions-dry-run
+  linux-x64: pending-actions-dry-run
+signing:
+  macos: apple-development
+  notarized: false
+artifacts:
+  - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.dmg
+    bytes: 211082946
+    sha256: 1980dfd3b61e9f6597e9ba941cdd0f401e7ad65be296c74cf7284b71fb7af07b
+    updater_sha512: 4Cjjx4az/WxTVnXoTLqkDEZJsByNuXgFEG8Up2iCkmgOVplxTppvUFDVeik6W0PPasCDC8clDGO7P5ebKuOIrQ==
+  - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.dmg.blockmap
+    bytes: 223315
+    sha256: 289e8ca3978f567e479e950af084ad39aab40be659f7f3d8fbd2554f509ea554
+  - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.zip
+    bytes: 203570387
+    sha256: de0fd905dc287b64b56f35863bd5a4920c5b2416d992a1a7658c552d8edd7784
+    updater_sha512: vAAeexF1eg3SIyCd6If4AJ+/Fk1ttLQ/qy+LvzP9qwW+dOn5d5qHvPEv9ugWFp2dIWdW3etLgHTMaGSNfx0jFg==
+  - name: OpenChamber-LingXiFox-1.0.1-mac-arm64.zip.blockmap
+    bytes: 203421
+    sha256: 223fa1453ee72db6095beb80f6bf1cecec6a19f3e26595118f48ebe4e09e9bb5
+  - name: latest-mac.yml
+    bytes: 551
+    sha256: c97ba4d68417329f3a225ad786b18e7b2e6e709d3baf30677a3ac3af00004876
+  - name: SHA256SUMS.txt
+    bytes: 531
+    sha256: 4d4e3459d927ddc96294d332bddf5d6fe8bb58a665b0597c6f7ccf41ecd226a2

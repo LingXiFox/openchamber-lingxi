@@ -20,6 +20,10 @@ export const linuxAppImageArchSuffix = (architecture) => (
   architecture === 'x64' ? 'x86_64' : 'arm64'
 );
 
+export const linuxAppImageName = (productName, version, architecture) => (
+  `${productName}-${version}-linux-${linuxAppImageArchSuffix(architecture)}.AppImage`
+);
+
 const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
 
 export const readElfArchitecture = (filePath) => {
@@ -113,9 +117,8 @@ export const verifyExtractedPayload = ({
   return { nativeModuleCount: nativeModules.length, openCodeVersion: actualVersion };
 };
 
-const findAppImage = (version, architecture) => {
-  const suffix = linuxAppImageArchSuffix(architecture);
-  const expected = path.join(electronRoot, 'dist', `OpenChamber-${version}-linux-${suffix}.AppImage`);
+const findAppImage = (electronPackage, architecture) => {
+  const expected = path.join(electronRoot, 'dist', linuxAppImageName(electronPackage.build.productName, electronPackage.version, architecture));
   if (!fs.existsSync(expected)) throw new Error(`Linux AppImage not found: ${expected}`);
   return expected;
 };
@@ -136,8 +139,9 @@ const extractAppImage = (appImagePath, destination) => {
 
 const main = () => {
   const rootPackage = readJson(path.join(workspaceRoot, 'package.json'));
+  const electronPackage = readJson(path.join(electronRoot, 'package.json'));
   const target = normalizeTargetArchitecture(process.env.OPENCHAMBER_TARGET_ARCH || process.arch).node;
-  const appImagePath = process.argv[2] ? path.resolve(process.argv[2]) : findAppImage(rootPackage.version, target);
+  const appImagePath = process.argv[2] ? path.resolve(process.argv[2]) : findAppImage(electronPackage, target);
   assertElfArchitecture(appImagePath, target, 'AppImage');
 
   const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'openchamber-appimage-'));

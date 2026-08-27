@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-import { linuxAppImageArchSuffix, readElfArchitecture, verifyExtractedPayload } from './verify-linux-appimage.mjs';
+import { linuxAppImageArchSuffix, linuxAppImageName, readElfArchitecture, verifyExtractedPayload } from './verify-linux-appimage.mjs';
 
 const writeElf = (filePath, architecture) => {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -42,6 +42,7 @@ test('reads supported ELF architectures', () => {
 test('AppImage artifact names use electron-builder arch suffixes', () => {
   assert.equal(linuxAppImageArchSuffix('x64'), 'x86_64');
   assert.equal(linuxAppImageArchSuffix('arm64'), 'arm64');
+  assert.equal(linuxAppImageName('OpenChamber LingXiFox', '1.0.1', 'x64'), 'OpenChamber LingXiFox-1.0.1-linux-x86_64.AppImage');
 });
 
 test('verifies identity, version, and native payload architecture', () => {

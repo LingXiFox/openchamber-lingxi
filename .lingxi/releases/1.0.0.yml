@@ -1,0 +1,39 @@
+schema: 1
+product:
+  name: OpenChamber LingXiFox
+  app_id: com.lingxifox.openchamber
+version: 1.0.0
+tag: lingxi-v1.0.0
+state: published
+upstream:
+  tag: v1.20.0
+  commit: 52ee878669867d5cc415f7da7bda1808d51fdf5d
+source:
+  release_commit: 092737d3f5860111172aa0900a09ecd58a53b0ca
+  release_tree: b476e7c961d47dc2e9aa399d38b8d26b924c5578
+  binary_attestation: absent
+  note: The public tag is the release source record, but the binaries do not embed a source commit attestation.
+github:
+  release_url: https://github.com/LingXiFox/openchamber-lingxi/releases/tag/lingxi-v1.0.0
+  published_at: 2026-08-26T11:09:39Z
+signing:
+  macos: apple-development
+  notarized: false
+artifacts:
+  - name: OpenChamber-LingXiFox-1.0.0-mac-arm64.dmg
+    bytes: 210881238
+    sha256: 86727a386bdbf41b2ce55ef39170591e1984a27f486cca447b0bc05ec9832683
+    updater_sha512: 6heMm1RRDOCy/KTrYqUj8uk/8sy4J4SyBYdMqH0RZH6OGaFW416uROANiNJqCDQYmFcDA23oOvF1s/eCC3Jlew==
+  - name: OpenChamber-LingXiFox-1.0.0-mac-arm64.zip
+    bytes: 203373969
+    sha256: 4ba2e2b24fa5472b19010be7e0013c8dd500a6ea95316d0735a5e15c988ce47d
+    updater_sha512: B88jt/tYGF/i0wAKrwhdQadtYF0GQM3nUAUO5y1fJNQ4aBi6ny+cbmn1tz/VsubmUKFkMElCOV946W8IXtJCAw==
+  - name: latest-mac.yml
+    bytes: 551
+    sha256: 14d5ff82f85228d47320ae2862850c21479a741521ae30444b082676232827a1
+  - name: SHA256SUMS.txt
+    bytes: 297
+    sha256: c4ad96602d7173e35e76fcd2fc285f900c985a1630ddeb7030fe2dfbbcf65b58
+  - name: openchamber-docs-source-092737d3.tar.gz
+    bytes: 397865
+    sha256: 281928e1365071ddd7ad9a811ae9e6465429dcc51b2de73abf8c71ff47de9049

@@ -3,9 +3,9 @@
 This file defines the persistent release model and release invariants for
 OpenChamber LingXiFox.
 
-Concrete release versions, upstream base revisions, artifact hashes, sizes,
-release dates, and other per-release metadata are recorded by release-specific
-commits and are not part of the reusable LingXi release-base patch.
+Concrete release versions, upstream revisions, artifact hashes, sizes, dates,
+and provenance are recorded under `.lingxi/releases/` and `docs/releases/`.
+They are not part of the reusable LingXi release-base patch.
 
 ## Version model
 
@@ -91,6 +91,21 @@ published artifact bytes must agree exactly.
 
 Concrete artifact names, hashes and sizes belong to the release-specific
 record, not to this reusable base patch.
+
+## Release automation
+
+The canonical integration branch decides release content. The immutable
+`lingxi-vX.Y.Z` tag decides the Build Source. Preflight resolves the selected
+ref once, and every build job checks out that exact commit. Packaging must not
+mutate versions or source files.
+
+Native jobs record content digests before upload. Assembly must reproduce those
+digests after download, and publishing must verify the assembled checksums after
+its second artifact download.
+
+Use `.github/workflows/lingxi-prepare-release.yml` for version preparation and
+`.github/workflows/lingxi-release.yml` for native dry-runs and tag releases.
+The full procedure is documented in `docs/releases/RELEASE_PROCESS.md`.
 
 ## Upstream-base migration
 
