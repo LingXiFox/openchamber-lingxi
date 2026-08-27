@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   validate-and-package:
+    if: ${{ github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'lingxi-v') }}
     runs-on: ubuntu-latest
     outputs:
       archive_name: ${{ steps.archive.outputs.archive_name }}
