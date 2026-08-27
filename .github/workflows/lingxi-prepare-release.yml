@@ -120,7 +120,7 @@ jobs:
           BASE: ${{ inputs.source_ref }}
         run: |
           set -euo pipefail
-          branch="release/lingxi-${VERSION}-prepare-${GITHUB_RUN_NUMBER}"
+          branch="release/lingxi-${VERSION}-prepare-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
           git switch -c "$branch"
           git add bun.lock packages/electron/package.json
           git -c user.name="github-actions[bot]" \
