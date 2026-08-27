@@ -1,5 +1,9 @@
 import React from 'react';
-import { cn, getModifierLabel } from '@/lib/utils';
+import { cn } from '@/lib/utils';
+import {
+  formatShortcutForDisplay,
+  getEffectiveShortcutCombo,
+} from '@/lib/shortcuts';
 import { useUIStore } from '@/stores/useUIStore';
 import { useSettingsDirectory } from '@/hooks/useSettingsDirectory';
 import { useProjectsStore } from '@/stores/useProjectsStore';
@@ -187,6 +191,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
   const settingsPageRaw = useUIStore((state) => state.settingsPage);
   const isSettingsDialogOpen = useUIStore((state) => state.isSettingsDialogOpen);
   const setSettingsPage = useUIStore((state) => state.setSettingsPage);
+  const openSettingsShortcutOverride = useUIStore((state) => state.shortcutOverrides.open_settings);
   const settingsSlug = resolveSettingsSlug(settingsPageRaw);
 
   const [mobileStage, setMobileStage] = React.useState<MobileStage>(initialMobileStage);
@@ -728,7 +733,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
     : showBackButton
       ? t('settings.view.actions.backToSettings')
       : t('settings.view.actions.closeSettings');
-  const shortcutKey = getModifierLabel();
+  const openSettingsCombo = getEffectiveShortcutCombo(
+    'open_settings',
+    openSettingsShortcutOverride === undefined ? undefined : { open_settings: openSettingsShortcutOverride },
+  );
+  const closeSettingsTitle = openSettingsCombo
+    ? t('settings.view.actions.closeSettingsWithShortcut', {
+        shortcut: formatShortcutForDisplay(openSettingsCombo),
+      })
+    : t('settings.view.actions.closeSettings');
 
   const pushMobileSplitDetailHistory = React.useCallback((slug: SettingsPageSlug) => {
     if (typeof window === 'undefined' || runtimeCtx.isVSCode) {
@@ -1077,7 +1090,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
               type="button"
               onClick={onClose}
               aria-label={t('settings.view.actions.closeSettings')}
-              title={t('settings.view.actions.closeSettingsWithShortcut', { shortcut: shortcutKey })}
+              title={closeSettingsTitle}
               className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-interactive-hover/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <Icon name="close" className="h-5 w-5" />
@@ -1105,7 +1118,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onClose, forceMobile
             type="button"
             onClick={onClose}
             aria-label={t('settings.view.actions.closeSettings')}
-            title={t('settings.view.actions.closeSettingsWithShortcut', { shortcut: shortcutKey })}
+            title={closeSettingsTitle}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md p-0.5 text-muted-foreground hover:text-foreground hover:bg-interactive-hover/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <Icon name="close" className="h-5 w-5" />

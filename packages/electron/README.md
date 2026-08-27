@@ -89,20 +89,6 @@ Build output goes to `packages/electron/dist`.
 
 macOS builds produce `dmg` and `zip` artifacts. Windows builds produce an NSIS installer. Linux builds produce an AppImage for the native x64 or arm64 host.
 
-### Remote macOS Build From Linux
-
-The Linux workspace remains the source of truth. To incrementally synchronize it to the isolated `macos-host` build directory, build with the local self-signed identity, verify the app signature, and copy the artifacts back under `artifacts/macos`, run:
-
-```bash
-bun run electron:build:macos:remote
-```
-
-The first run installs pinned Bun and Node.js binaries under `/Users/macserver/Build/OpenChamber-LingXiFox/tools` after checking their SHA-256 hashes. Project dependencies, download caches, temporary files, the source mirror, and remote artifacts stay below that build root. Git data, local environment files, dependencies, generated output, mobile, docs, and VS Code sources are not synchronized.
-
-The signing certificate path must be provided through the `OPENCHAMBER_MACOS_P12_PATH` environment variable, with identity `LingXiFox Code Signing`. The script reads the P12 password without echo and passes it over SSH without writing it to disk. Electron Builder imports it into a temporary keychain and deletes that keychain after the build. Local self-signed builds explicitly disable Apple notarization and secure timestamps; they are suitable for controlled machines that trust this certificate, not public distribution through Gatekeeper.
-
-Use `./scripts/build-macos-remote.sh --check` for a toolchain and P12 check, `--arch x64` for an Intel artifact, or the environment variables `OPENCHAMBER_MACOS_HOST`, `OPENCHAMBER_MACOS_BUILD_ROOT`, `OPENCHAMBER_MACOS_P12_PATH`, and `OPENCHAMBER_MACOS_SIGNING_IDENTITY` to override local defaults.
-
 ### LingXiFox Desktop Identity
 
 Downstream builds install as `OpenChamber LingXiFox` with bundle ID `com.lingxifox.openchamber`, so the macOS bundle is `OpenChamber LingXiFox.app` and can coexist with the official app. This package identity intentionally still shares the existing OpenChamber configuration and data paths, including `~/.config/openchamber`; do not run both desktop apps concurrently while they share writable state.
@@ -149,6 +135,10 @@ Managed local Desktop startup prefers OpenCode binaries in this order:
 Use an explicit override when testing a different OpenCode CLI build or when a user needs to point Desktop at a custom binary. The configured path must point to the standalone CLI, not the OpenCode Desktop app executable.
 
 ## Common Env Vars
+
+Use `bun run web:sandbox` for Web/UI QA through OpenChamber's built-in browser capability. Use `bun run electron:sandbox` only for Electron-specific behavior. Both commands keep Electron storage, OpenChamber settings, managed OpenCode state, provider configuration, caches, logs, temporary files, and the managed workspace under `.dev-sandbox/`. The launcher also strips inherited OpenChamber/OpenCode endpoints and credential environment variables, skips login-shell environment loading and OS deep-link registration, and chooses free HMR/API ports without stopping an existing listener. Startup logs print the resolved storage paths, ports, and isolation status.
+
+`bun run electron:sandbox:clean` refuses to run while the Sandbox launcher is alive. It moves the previous state into ignored `.dev-sandbox-backups/` rather than deleting it.
 
 | Variable | Use |
 |----------|-----|

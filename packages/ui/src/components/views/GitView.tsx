@@ -3,6 +3,7 @@ import { useSessionUIStore } from '@/sync/session-ui-store';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { useFireworksCelebration } from '@/contexts/FireworksContext';
 import type { GitIdentityProfile, CommitFileEntry, GitStatus } from '@/lib/api/types';
+import { rankByQuery } from '@/lib/search/fuzzySearch';
 import { useGitIdentitiesStore } from '@/stores/useGitIdentitiesStore';
 import { useGraphTraceStore } from '@/stores/useGraphTraceStore';
 import { useShallow } from 'zustand/react/shallow';
@@ -2832,7 +2833,8 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
           <DialogHeader className="px-4 pt-4">
             <DialogTitle>{t('gitView.gitmoji.title')}</DialogTitle>
           </DialogHeader>
-          <Command className="h-[420px]">
+          {/* rankByQuery owns filtering/ordering; cmdk must not re-filter. */}
+          <Command className="h-[420px]" shouldFilter={false}>
             <CommandInput
               placeholder={t('gitView.gitmoji.searchPlaceholder')}
               value={gitmojiSearch}
@@ -2841,18 +2843,7 @@ export const GitView: React.FC<GitViewProps> = ({ isActive }) => {
             <CommandList>
               <CommandEmpty>{t('gitView.gitmoji.empty')}</CommandEmpty>
               <CommandGroup>
-                {(gitmojiEmojis.length === 0
-                  ? []
-                  : gitmojiEmojis.filter((entry) => {
-                    const term = gitmojiSearch.trim().toLowerCase();
-                    if (!term) return true;
-                    return (
-                      entry.emoji.includes(term) ||
-                      entry.code.toLowerCase().includes(term) ||
-                      entry.description.toLowerCase().includes(term)
-                    );
-                  })
-                ).map((entry) => (
+                {rankByQuery(gitmojiEmojis, gitmojiSearch, (entry) => [entry.code, entry.description, entry.emoji]).map((entry) => (
                   <CommandItem
                     key={entry.code}
                     onSelect={() => handleSelectGitmoji(entry.emoji, entry.code)}

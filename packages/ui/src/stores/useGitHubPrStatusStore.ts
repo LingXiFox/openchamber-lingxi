@@ -271,45 +271,6 @@ export const getFreshestPrStatusForBranch = (
   return getFreshestPrEntryForBranch(entries, directory, branch)?.status ?? null;
 };
 
-const getPrEntryForBranchAndRemote = (
-  entries: Record<string, PrStatusEntry>,
-  directory: string,
-  branch: string,
-  remoteName: string | null,
-): PrStatusEntry | null => {
-  const runtimeKey = getRuntimeKey();
-  let best: PrStatusEntry | null = null;
-  for (const [key, entry] of Object.entries(entries)) {
-    if (!entry.status) {
-      continue;
-    }
-    const parsed = parseStatusKey(key);
-    if (!parsed
-      || parsed.runtimeKey !== runtimeKey
-      || parsed.directory !== directory
-      || parsed.branch !== branch) {
-      continue;
-    }
-    const observedRemote = entry.resolvedRemoteName ?? entry.status.resolvedRemoteName ?? (parsed.remote === 'auto' ? null : parsed.remote);
-    if (remoteName === null ? parsed.remote !== 'auto' : observedRemote !== remoteName) {
-      continue;
-    }
-    if (!best || entry.lastRefreshAt > best.lastRefreshAt) {
-      best = entry;
-    }
-  }
-  return best;
-};
-
-export const getPrStatusForBranchAndRemote = (
-  entries: Record<string, PrStatusEntry>,
-  directory: string,
-  branch: string,
-  remoteName: string | null,
-): GitHubPullRequestStatus | null => {
-  return getPrEntryForBranchAndRemote(entries, directory, branch, remoteName)?.status ?? null;
-};
-
 const getKeysBySignature = (entries: Record<string, PrStatusEntry>, signature: string): string[] => {
   return Object.entries(entries)
     .filter(([, entry]) => getSignatureFromEntry(entry) === signature)
@@ -1032,17 +993,5 @@ export const useFreshestPrVisualSummaryForBranch = (
   return useGitHubPrStatusStore((state) => {
     if (!directory || !branch || !cacheKey) return null;
     return getCachedPrSummary(cacheKey, getFreshestPrEntryForBranch(state.entries, directory, branch));
-  });
-};
-
-export const usePrVisualSummaryForBranchAndRemote = (
-  directory: string | null,
-  branch: string | null,
-  remoteName: string | null,
-): PrVisualSummary | null => {
-  const cacheKey = directory && branch ? JSON.stringify(['branch', getRuntimeKey(), directory, branch, remoteName]) : null;
-  return useGitHubPrStatusStore((state) => {
-    if (!directory || !branch || !cacheKey) return null;
-    return getCachedPrSummary(cacheKey, getPrEntryForBranchAndRemote(state.entries, directory, branch, remoteName));
   });
 };

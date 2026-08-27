@@ -3,7 +3,7 @@ import { useI18n } from '@/lib/i18n';
 import { useGitStore } from '@/stores/useGitStore';
 import { useRuntimeAPIs } from '@/hooks/useRuntimeAPIs';
 import { runBackgroundNetworkTask } from '@/lib/background-network';
-import { usePrVisualSummaryForBranchAndRemote } from '@/stores/useGitHubPrStatusStore';
+import { useFreshestPrVisualSummaryForBranch } from '@/stores/useGitHubPrStatusStore';
 import { useSession, useSessionMessages } from '@/sync/sync-context';
 import { useConfigStore } from '@/stores/useConfigStore';
 import { useUIStore } from '@/stores/useUIStore';
@@ -23,7 +23,6 @@ import {
   WorkStatusValue,
 } from './WorkStatusPrimitives';
 import { useReportWorkStatusPresence } from './presenceContext';
-import { getWorkStatusPrRemoteName } from './workStatusPrRemote';
 
 type Props = {
   sessionId: string | null;
@@ -86,7 +85,6 @@ export const WorkStatusPrimaryGroup: React.FC<Props> = ({ sessionId, directory, 
   }, [clearDiffCache, directory, fetchStatus, git, showRepository]);
 
   const branch = gitStatus?.current?.trim() || null;
-  const remoteName = getWorkStatusPrRemoteName(gitStatus?.tracking);
 
   const availableWorktreesByProject = useSessionUIStore((state) => state.availableWorktreesByProject);
   // Worktrees normally sit beside rather than beneath their project directory,
@@ -109,7 +107,7 @@ export const WorkStatusPrimaryGroup: React.FC<Props> = ({ sessionId, directory, 
   // Read-only: PR watching is owned by the background tracker. Starting a watch
   // here would multiply GitHub requests per open session, which is exactly the
   // fan-out the PR-status concurrency gate exists to prevent.
-  const prSummary = usePrVisualSummaryForBranchAndRemote(directory, branch, remoteName);
+  const prSummary = useFreshestPrVisualSummaryForBranch(directory, branch);
 
   // `getCurrentModel` is an imperative getter: its reference never changes, so
   // calling it in render subscribes to nothing. Subscribe to the selected model

@@ -28,7 +28,7 @@ Example progression:
 Once a formal LingXi version is published, subsequent LingXi versions must
 never go backwards.
 
-## LingXi 1.0.0 — current
+## LingXi 1.0.0 — historical release
 
 - LingXi Version: 1.0.0
 - Bundle Version: 1.0.0
@@ -100,6 +100,45 @@ The following remain development-only:
 - related sandbox tests and npm scripts
 - sandbox-specific `.gitignore` entries
 - sandbox README documentation
+
+## LingXi 1.0.1 — current
+
+- Product: OpenChamber LingXiFox
+- LingXi Version: 1.0.1
+- Release Type: Maintenance / upstream-base migration
+- Upstream Base: OpenChamber v1.21.0
+- Upstream Commit: `ad7fd356339ccc5c9af5af1a6786662572d53ed0`
+- Integration Source: `integration/openchamber-1.21.0`
+- Integration Source Commit: `6afd22ca6ff203980735e870737b3871b8093e60`
+- Release Branch: `release/1.0.1`
+
+LingXi product version and OpenChamber base version remain independent axes.
+LingXi 1.0.1 is based on OpenChamber 1.21.0; it is not an upstream-version
+rename or a LingXi 1.1.0 feature release.
+
+### Release scope
+
+- OpenChamber upstream base migration from 1.20.0 to 1.21.0
+- LingXi Release Base
+- Background Appearance and the runtime-scoped background fix
+- Sub2API quota provider, account-scoped quota, network-error classification,
+  and percent-only quota display
+- Patch Graph
+- UI Motion Foundation
+- Agent Activity Visuals
+- OpenChamber v1.21.0 baseline test fix
+
+### Release targets
+
+- macOS
+- Windows
+- Linux
+
+### Artifact state
+
+Pending final release build and verification. No 1.0.1 artifact names, sizes,
+hashes, updater manifests, or GitHub asset URLs are recorded until the final
+artifacts are generated and verified.
 
 ## Application identity
 

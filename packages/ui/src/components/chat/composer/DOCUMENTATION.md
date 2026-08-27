@@ -137,10 +137,14 @@ and the send path reading the same grammar.
   drawn caret through a class it only writes while applying an update, so the
   selection has to be the update that follows the focus.
 - `submit/buildOutgoingMessage.ts` flattens queued messages, the composer text,
-  inline comments and context into OpenCode's one-primary-plus-parts shape. The
-  oldest queued message becomes primary; **inline comments attach to the last
-  body the user authored** rather than becoming their own part; PR instructions
-  precede the PR diff.
+  context drafts and linked references into OpenCode's one-primary-plus-parts
+  shape. The oldest queued message becomes primary. **Every attached context
+  item (inline comments, terminal selections, browser annotations, PR context,
+  linked issue/PR) becomes its own synthetic text part carrying structured
+  metadata** built by `lib/messages/contextParts.ts`; the timeline reads that
+  metadata back to render context blocks. PR instructions precede the PR diff.
+  Queueing a message leaves context drafts in their store on purpose — the send
+  that later delivers the queue consumes them.
 - `state/useComposerDraft.ts` — a draft belongs to a (runtime, directory,
   session) identity. Writes are debounced while typing but forced at every edge
   where the page may stop running, because a pending timer is not a saved
@@ -150,6 +154,9 @@ and the send path reading the same grammar.
 - `state/useDraftTarget.ts` — the draft can target a directory that does not
   exist yet (a worktree being created). It must survive not appearing in the
   branch list, or the selector snaps back to the project root mid-creation.
+- `ui/DraftTargetSelectors.tsx` owns the controlled project/worktree picker
+  state and registers its application shortcuts locally. The selectors only
+  consume their shared prefix while the draft target UI is mounted.
 
 ## Mobile
 

@@ -25,6 +25,8 @@ changelog-*.png
 local-dev*
 .tmp/
 /tmp/
+/.dev-sandbox/
+/.dev-sandbox-backups/
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -73,6 +75,3 @@ workspaces/
 .maintenance-clone
 test-results/
 artifacts/
-
-# Signing certificates
-*.p12

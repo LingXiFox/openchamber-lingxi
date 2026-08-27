@@ -995,72 +995,19 @@ export const registerAuthAndAccessRoutes = (app, dependencies) => {
 export const registerSettingsUtilityRoutes = (app, dependencies) => {
   const {
     readCustomThemesFromDisk,
-    resolveThemeAsset,
     refreshOpenCodeAfterConfigChange,
     clientReloadDelayMs,
   } = dependencies;
 
   app.get('/api/config/themes', async (_req, res) => {
     try {
-      const result = await readCustomThemesFromDisk();
-      let themes;
-      let diagnostics = [];
-      if (Array.isArray(result)) {
-        themes = result;
-      } else {
-        themes = Array.isArray(result?.themes) ? result.themes : [];
-        diagnostics = Array.isArray(result?.diagnostics) ? result.diagnostics : [];
-      }
-      // Additive shape for backward compat
-      res.json({ themes, diagnostics });
+      const customThemes = await readCustomThemesFromDisk();
+      res.json({ themes: customThemes });
     } catch (error) {
       console.error('Failed to load custom themes:', error);
       res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load custom themes' });
     }
   });
-
-  // Safe theme asset serving - not a generic file server
-  // Route: GET /api/config/themes/:themeId/assets/<relativePath>
-  // Uses theme registry (themeId -> assetsRoot) to avoid path injection via themeId concat.
-  const handleThemeAsset = async (req, res) => {
-    try {
-      const themeId = String(req.params.themeId ?? '').trim();
-      const wildcard = req.params.assetPath;
-      const relativePath = Array.isArray(wildcard) ? wildcard.join('/') : String(wildcard ?? '');
-
-      if (!themeId) {
-        return res.status(400).json({ error: 'themeId required' });
-      }
-      if (!relativePath || relativePath.trim().length === 0) {
-        return res.status(400).json({ error: 'asset path required' });
-      }
-
-      // Refresh the current runtime's registry before resolving. Theme failures
-      // remain local to this request and never affect the selected runtime.
-      await readCustomThemesFromDisk();
-      const result = await resolveThemeAsset(themeId, relativePath);
-      if (!result.ok) {
-        return res.status(result.status).json({ error: result.message, code: result.code });
-      }
-
-      const { absolutePath, mime } = result;
-      res.setHeader('Content-Type', mime);
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
-      return res.sendFile(absolutePath, (error) => {
-        if (!error || res.headersSent) return;
-        console.error('[themes] Asset route error:', error);
-        res.status(500).json({ error: 'Failed to serve theme asset' });
-      });
-    } catch (error) {
-      console.error('[themes] Asset route error:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Failed to serve theme asset' });
-      }
-    }
-  };
-
-  app.get('/api/config/themes/:themeId/assets/*assetPath', handleThemeAsset);
 
   app.post('/api/config/reload', async (_req, res) => {
     try {

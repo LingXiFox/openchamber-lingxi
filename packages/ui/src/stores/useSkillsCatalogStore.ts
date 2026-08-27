@@ -18,7 +18,6 @@ import { opencodeClient } from '@/lib/opencode/client';
 import { useProjectsStore } from '@/stores/useProjectsStore';
 import { startConfigUpdate } from '@/lib/configUpdate';
 import { runtimeFetch } from '@/lib/runtime-fetch';
-import { getRuntimeKey } from '@/lib/runtime-switch';
 import { noteDeferredRestartFromPayload } from '@/lib/opencode/deferredRestart';
 
 const FALLBACK_SOURCES: SkillsCatalogSource[] = [
@@ -61,13 +60,10 @@ const skillsCatalogLastLoadedAt = new Map<string, number>();
 const skillsCatalogLoadInFlight = new Map<string, Promise<boolean>>();
 const sourceLoadInFlight = new Map<string, Promise<boolean>>();
 let activeSourceLoads = 0;
-let skillsCatalogGeneration = 0;
 
-const getSkillsCatalogCacheKey = (runtimeKey: string, directory: string | null): string =>
-  JSON.stringify([runtimeKey, directory?.trim() || DEFAULT_SKILLS_CATALOG_CACHE_KEY]);
-
-const getSourceLoadKey = (runtimeKey: string, directory: string | null, sourceId: string): string =>
-  JSON.stringify([runtimeKey, directory?.trim() || DEFAULT_SKILLS_CATALOG_CACHE_KEY, sourceId]);
+const getSkillsCatalogCacheKey = (directory: string | null): string => {
+  return directory?.trim() || DEFAULT_SKILLS_CATALOG_CACHE_KEY;
+};
 
 const getRequestDirectory = (): string | null => {
   try {
@@ -107,7 +103,6 @@ export interface SkillsCatalogState {
   scanResults: SkillsCatalogItem[] | null;
 
   setSelectedSource: (id: string | null) => void;
-  resetForRuntimeSwitch: () => void;
 
   loadCatalog: (options?: { refresh?: boolean }) => Promise<boolean>;
   loadSource: (sourceId: string, options?: { refresh?: boolean }) => Promise<boolean>;
@@ -136,35 +131,9 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
 
       setSelectedSource: (id) => set({ selectedSourceId: id }),
 
-      resetForRuntimeSwitch: () => {
-        skillsCatalogGeneration += 1;
-        activeSourceLoads = 0;
-        skillsCatalogLastLoadedAt.clear();
-        skillsCatalogLoadInFlight.clear();
-        sourceLoadInFlight.clear();
-        set({
-          sources: FALLBACK_SOURCES,
-          itemsBySource: {},
-          selectedSourceId: FALLBACK_SOURCES[0]?.id ?? null,
-          loadedSourceIds: {},
-          isLoadingCatalog: false,
-          isLoadingSource: false,
-          lastCatalogError: null,
-          lastScanError: null,
-          scanResults: null,
-        });
-      },
-
       loadCatalog: async (options) => {
-        const runtimeKey = getRuntimeKey();
-        const generation = skillsCatalogGeneration;
         const currentDirectory = getRequestDirectory();
-        const isCurrentScope = () => (
-          generation === skillsCatalogGeneration
-          && runtimeKey === getRuntimeKey()
-          && currentDirectory === getRequestDirectory()
-        );
-        const cacheKey = getSkillsCatalogCacheKey(runtimeKey, currentDirectory);
+        const cacheKey = getSkillsCatalogCacheKey(currentDirectory);
         const now = Date.now();
         const loadedAt = skillsCatalogLastLoadedAt.get(cacheKey) ?? 0;
         const hasCachedCatalog = get().sources.length > 0;
@@ -201,9 +170,6 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
               });
 
               const payload = (await response.json().catch(() => null)) as SkillsCatalogResponse | null;
-              if (!isCurrentScope()) {
-                return false;
-              }
               if (!response.ok || !payload?.ok) {
                 lastError = payload?.error || { kind: 'unknown', message: `Failed to load catalog (${response.status})` };
                 throw new Error(lastError.message);
@@ -233,20 +199,16 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
           } catch (error) {
             lastError = lastError || { kind: 'unknown', message: error instanceof Error ? error.message : String(error) };
 
-            if (isCurrentScope()) {
-              set({
-                sources: previous.sources,
-                itemsBySource: previous.itemsBySource,
-                loadedSourceIds: previous.loadedSourceIds,
-                lastCatalogError: lastError || { kind: 'unknown', message: 'Failed to load catalog' },
-              });
-            }
+            set({
+              sources: previous.sources,
+              itemsBySource: previous.itemsBySource,
+              loadedSourceIds: previous.loadedSourceIds,
+              lastCatalogError: lastError || { kind: 'unknown', message: 'Failed to load catalog' },
+            });
 
             return false;
           } finally {
-            if (isCurrentScope()) {
-              set({ isLoadingCatalog: false });
-            }
+            set({ isLoadingCatalog: false });
           }
         })();
 
@@ -254,9 +216,7 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
         try {
           return await request;
         } finally {
-          if (skillsCatalogLoadInFlight.get(cacheKey) === request) {
-            skillsCatalogLoadInFlight.delete(cacheKey);
-          }
+          skillsCatalogLoadInFlight.delete(cacheKey);
         }
       },
 
@@ -265,18 +225,11 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
           return false;
         }
 
-        const runtimeKey = getRuntimeKey();
-        const generation = skillsCatalogGeneration;
-        const currentDirectory = getRequestDirectory();
-        const sourceKey = getSourceLoadKey(runtimeKey, currentDirectory, sourceId);
-        const isCurrentRuntime = () => generation === skillsCatalogGeneration && runtimeKey === getRuntimeKey();
-        const isCurrentScope = () => isCurrentRuntime() && currentDirectory === getRequestDirectory();
-
         // Deduplicate concurrent loads of the same source: the background
         // loader effect can restart while a request for this source is
         // already in flight.
         if (!options?.refresh) {
-          const inFlight = sourceLoadInFlight.get(sourceKey);
+          const inFlight = sourceLoadInFlight.get(sourceId);
           if (inFlight) {
             return inFlight;
           }
@@ -287,6 +240,7 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
 
         const request = (async () => {
           try {
+            const currentDirectory = getRequestDirectory();
             const refresh = options?.refresh ? '&refresh=true' : '';
             const queryParams = currentDirectory
               ? `?directory=${encodeURIComponent(currentDirectory)}&sourceId=${encodeURIComponent(sourceId)}${refresh}`
@@ -298,9 +252,6 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
             });
 
             const payload = (await response.json().catch(() => null)) as SkillsCatalogSourceResponse | null;
-            if (!isCurrentScope()) {
-              return false;
-            }
             const hasItems = Array.isArray((payload as SkillsCatalogSourceResponse | null)?.items);
             if (!response.ok || (!payload?.ok && !hasItems)) {
               const fallback = await runtimeFetch(`/api/config/skills/catalog${queryParams}`, {
@@ -308,9 +259,6 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
                 headers: { Accept: 'application/json' },
               });
               const fallbackPayload = (await fallback.json().catch(() => null)) as SkillsCatalogResponse | null;
-              if (!isCurrentScope()) {
-                return false;
-              }
               const fallbackItems = fallbackPayload?.itemsBySource?.[sourceId];
               if (fallback.ok && fallbackPayload?.ok && Array.isArray(fallbackItems)) {
                 set((state) => ({
@@ -335,28 +283,24 @@ export const useSkillsCatalogStore = create<SkillsCatalogState>()(
 
             return true;
           } catch (error) {
-            if (isCurrentScope()) {
-              set({
-                lastCatalogError: { kind: 'unknown', message: error instanceof Error ? error.message : String(error) },
-              });
-            }
+            set({
+              lastCatalogError: { kind: 'unknown', message: error instanceof Error ? error.message : String(error) },
+            });
             return false;
           } finally {
-            if (isCurrentRuntime()) {
-              activeSourceLoads = Math.max(0, activeSourceLoads - 1);
-              if (activeSourceLoads === 0) {
-                set({ isLoadingSource: false });
-              }
+            activeSourceLoads -= 1;
+            if (activeSourceLoads === 0) {
+              set({ isLoadingSource: false });
             }
           }
         })();
 
-        sourceLoadInFlight.set(sourceKey, request);
+        sourceLoadInFlight.set(sourceId, request);
         try {
           return await request;
         } finally {
-          if (sourceLoadInFlight.get(sourceKey) === request) {
-            sourceLoadInFlight.delete(sourceKey);
+          if (sourceLoadInFlight.get(sourceId) === request) {
+            sourceLoadInFlight.delete(sourceId);
           }
         }
       },

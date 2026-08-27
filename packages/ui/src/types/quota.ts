@@ -2,7 +2,6 @@ export type QuotaProviderId =
   | 'openai'
   | 'codex'
   | 'sub2api'
-  | 'command-code'
   | 'cursor'
   | 'claude'
   | 'github-copilot'
