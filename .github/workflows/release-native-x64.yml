@@ -1,0 +1,279 @@
+name: Native Windows Linux x64 Release Build
+
+on:
+  workflow_call:
+    inputs:
+      retention_days:
+        description: Artifact retention days
+        required: false
+        default: "7"
+        type: string
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: Artifact retention days
+        required: false
+        default: "7"
+        type: choice
+        options:
+          - "1"
+          - "3"
+          - "7"
+          - "14"
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_COMMIT: a83fd4cfbd51d6bacb21a134777afcf31ffbe079
+  RELEASE_VERSION: 1.0.1
+
+jobs:
+  build-native-x64:
+    name: Build ${{ matrix.platform }} x64
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            runner: windows-latest
+            arch: x64
+            builder_flag: --win
+            target: nsis
+            artifact_extension: .exe
+            manifest: latest.yml
+            sherpa_package: sherpa-onnx-win-x64
+            requires_blockmap: "true"
+          - platform: linux
+            runner: ubuntu-latest
+            arch: x64
+            builder_flag: --linux
+            target: AppImage
+            artifact_extension: .AppImage
+            manifest: latest-linux.yml
+            sherpa_package: sherpa-onnx-linux-x64
+            requires_blockmap: "false"
+    defaults:
+      run:
+        shell: bash
+    env:
+      ELECTRON_BUILDER_ARCH: ${{ matrix.arch }}
+      OPENCHAMBER_TARGET_ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Checkout frozen release source
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ env.SOURCE_COMMIT }}
+          persist-credentials: false
+
+      - name: Verify frozen source commit
+        run: test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "22"
+
+      - name: Install native dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify release identity and native dependency
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+          EXPECTED_TARGET: ${{ matrix.target }}
+          SHERPA_PACKAGE: ${{ matrix.sherpa_package }}
+        run: |
+          node - <<'NODE'
+          const electron = require('./packages/electron/package.json');
+          const expectedTarget = process.env.EXPECTED_TARGET;
+          const targets = electron.build[process.env.EXPECTED_PLATFORM === 'windows' ? 'win' : 'linux'].target;
+          if (electron.version !== process.env.RELEASE_VERSION) throw new Error(`Expected version ${process.env.RELEASE_VERSION}, got ${electron.version}`);
+          if (electron.build.productName !== 'OpenChamber LingXiFox') throw new Error(`Unexpected productName: ${electron.build.productName}`);
+          if (electron.build.publish.owner !== 'LingXiFox' || electron.build.publish.repo !== 'openchamber-lingxi') throw new Error('Unexpected updater repository');
+          if (targets.length !== 1 || targets[0] !== expectedTarget) throw new Error(`Expected only ${expectedTarget}, got ${targets.join(', ')}`);
+          if (process.arch !== 'x64') throw new Error(`Expected native x64 Node, got ${process.arch}`);
+          const sherpa = require.resolve(`${process.env.SHERPA_PACKAGE}/package.json`);
+          console.log(`Verified ${process.platform}-${process.arch}, ${expectedTarget}, and ${sherpa}`);
+          NODE
+
+      - name: Verify native Linux host
+        if: runner.os == 'Linux'
+        run: test "$(uname -m)" = "x86_64"
+
+      - name: Run focused Linux release tests
+        if: runner.os == 'Linux'
+        working-directory: packages/electron
+        run: |
+          bun run test:architecture
+          bun run test:updater
+
+      - name: Build native x64 package
+        working-directory: packages/electron
+        run: |
+          bun run build:web-assets
+          bun run prepare:opencode-cli
+          bun run verify:opencode-cli
+          bun run bundle:main
+          bun run rebuild:native
+          node ./scripts/package.mjs ${{ matrix.builder_flag }} --x64 --publish=never
+          bun run verify:opencode-cli:packaged
+
+      - name: Verify Linux AppImage payload
+        if: runner.os == 'Linux'
+        working-directory: packages/electron
+        run: |
+          shopt -s nullglob
+          appimages=(dist/*.AppImage)
+          test "${#appimages[@]}" -eq 1
+          node ./scripts/verify-linux-appimage.mjs "${appimages[0]}"
+
+      - name: Verify packaged Windows native modules
+        if: runner.os == 'Windows'
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+
+          const root = path.resolve('packages/electron/dist/win-unpacked/resources/app.asar.unpacked/node_modules');
+          const modules = [];
+          const visit = (directory) => {
+            for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+              const file = path.join(directory, entry.name);
+              if (entry.isDirectory()) visit(file);
+              else if (entry.isFile() && entry.name.endsWith('.node')) modules.push(file);
+            }
+          };
+          visit(root);
+
+          for (const required of ['pty.node', 'sherpa-onnx.node']) {
+            if (!modules.some((file) => path.basename(file) === required)) throw new Error(`Missing packaged native module: ${required}`);
+          }
+          for (const file of modules) {
+            const bytes = fs.readFileSync(file);
+            if (bytes.subarray(0, 2).toString('ascii') !== 'MZ') throw new Error(`Expected PE binary: ${file}`);
+            const pe = bytes.readUInt32LE(0x3c);
+            if (bytes.subarray(pe, pe + 4).toString('hex') !== '50450000') throw new Error(`Invalid PE header: ${file}`);
+            if (bytes.readUInt16LE(pe + 4) !== 0x8664) throw new Error(`Expected x64 native module: ${file}`);
+          }
+          console.log(`Verified ${modules.length} packaged Windows x64 native modules`);
+          NODE
+
+      - name: Smoke Windows unpacked app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $apps = @(Get-ChildItem "packages/electron/dist/win-unpacked" -File -Filter "*.exe")
+          if ($apps.Count -ne 1) { throw "Expected one unpacked app executable, found $($apps.Count)" }
+          $runtime = Join-Path $env:RUNNER_TEMP "openchamber-windows-smoke"
+          $env:HOME = Join-Path $runtime "home"
+          $env:APPDATA = Join-Path $runtime "appdata"
+          $env:LOCALAPPDATA = Join-Path $runtime "localappdata"
+          $env:OPENCHAMBER_DATA_DIR = Join-Path $runtime "data"
+          $userData = Join-Path $runtime "electron-user-data"
+          New-Item -ItemType Directory -Force $env:HOME, $env:APPDATA, $env:LOCALAPPDATA, $env:OPENCHAMBER_DATA_DIR, $userData | Out-Null
+          $process = Start-Process -FilePath $apps[0].FullName -ArgumentList "--user-data-dir=`"$userData`"" -PassThru
+          try {
+            Start-Sleep -Seconds 15
+            if ($process.HasExited) { throw "Unpacked Windows app exited during smoke test with code $($process.ExitCode)" }
+          } finally {
+            if (-not $process.HasExited) {
+              & taskkill.exe /PID $process.Id /T /F | Out-Null
+              $process.WaitForExit()
+            }
+          }
+
+      - name: Smoke Linux AppImage
+        if: runner.os == 'Linux'
+        working-directory: packages/electron
+        run: |
+          shopt -s nullglob
+          appimages=(dist/*.AppImage)
+          test "${#appimages[@]}" -eq 1
+          command -v xvfb-run
+          runtime="$RUNNER_TEMP/openchamber-linux-smoke"
+          mkdir -p "$runtime/home/.config" "$runtime/home/.local/share" "$runtime/home/.cache" "$runtime/data" "$runtime/electron-user-data"
+          set +e
+          timeout --kill-after=5s 20s xvfb-run -a env \
+            HOME="$runtime/home" \
+            XDG_CONFIG_HOME="$runtime/home/.config" \
+            XDG_DATA_HOME="$runtime/home/.local/share" \
+            XDG_CACHE_HOME="$runtime/home/.cache" \
+            OPENCHAMBER_DATA_DIR="$runtime/data" \
+            APPIMAGE_EXTRACT_AND_RUN=1 \
+            "${appimages[0]}" --user-data-dir="$runtime/electron-user-data"
+          status=$?
+          set -e
+          test "$status" -eq 124
+
+      - name: Stage canonical updater artifacts
+        id: stage
+        working-directory: packages/electron
+        env:
+          ARTIFACT_EXTENSION: ${{ matrix.artifact_extension }}
+          MANIFEST: ${{ matrix.manifest }}
+          PLATFORM: ${{ matrix.platform }}
+          REQUIRES_BLOCKMAP: ${{ matrix.requires_blockmap }}
+        run: |
+          node - <<'NODE'
+          const crypto = require('node:crypto');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const YAML = require('yaml');
+
+          const dist = path.resolve('dist');
+          const manifestPath = path.join(dist, process.env.MANIFEST);
+          const manifest = YAML.parse(fs.readFileSync(manifestPath, 'utf8'));
+          const artifacts = fs.readdirSync(dist).filter((name) => name.endsWith(process.env.ARTIFACT_EXTENSION) && fs.statSync(path.join(dist, name)).isFile());
+          if (artifacts.length !== 1) throw new Error(`Expected one ${process.env.ARTIFACT_EXTENSION} artifact, found ${artifacts.length}`);
+          if (manifest.version !== process.env.RELEASE_VERSION) throw new Error(`Expected manifest version ${process.env.RELEASE_VERSION}, got ${manifest.version}`);
+          if (!Array.isArray(manifest.files) || manifest.files.length !== 1) throw new Error(`Expected one manifest file entry, got ${manifest.files?.length}`);
+
+          const source = path.join(dist, artifacts[0]);
+          const bytes = fs.readFileSync(source);
+          const entry = manifest.files[0];
+          const canonicalName = decodeURIComponent(path.basename(entry.url));
+          const sha512 = crypto.createHash('sha512').update(bytes).digest('base64');
+          if (entry.size !== bytes.length) throw new Error(`Manifest size mismatch for ${canonicalName}`);
+          if (entry.sha512 !== sha512) throw new Error(`Manifest SHA-512 mismatch for ${canonicalName}`);
+          if (manifest.path && decodeURIComponent(path.basename(manifest.path)) !== canonicalName) throw new Error(`Manifest path mismatch: ${manifest.path}`);
+          if (manifest.sha512 && manifest.sha512 !== sha512) throw new Error('Top-level manifest SHA-512 mismatch');
+
+          const stage = path.resolve('../../release-artifacts', process.env.PLATFORM);
+          fs.rmSync(stage, { recursive: true, force: true });
+          fs.mkdirSync(stage, { recursive: true });
+          const stagedArtifact = path.join(stage, canonicalName);
+          fs.copyFileSync(source, stagedArtifact);
+          fs.copyFileSync(manifestPath, path.join(stage, process.env.MANIFEST));
+
+          const sourceBlockmap = `${source}.blockmap`;
+          if (process.env.REQUIRES_BLOCKMAP === 'true') {
+            if (!fs.existsSync(sourceBlockmap)) throw new Error(`Missing blockmap: ${sourceBlockmap}`);
+            if (Number.isSafeInteger(entry.blockMapSize) && fs.statSync(sourceBlockmap).size !== entry.blockMapSize) throw new Error('Blockmap size mismatch');
+            fs.copyFileSync(sourceBlockmap, `${stagedArtifact}.blockmap`);
+          }
+
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `artifact=${stagedArtifact}\nmanifest=${path.join(stage, process.env.MANIFEST)}\n`);
+          console.log(`Staged ${canonicalName} (${bytes.length} bytes, SHA-512 ${sha512})`);
+          NODE
+
+      - name: Verify staged updater metadata
+        working-directory: packages/electron
+        run: node ./scripts/verify-update-manifest.mjs "${{ steps.stage.outputs.manifest }}" "${{ steps.stage.outputs.artifact }}" "$RELEASE_VERSION"
+
+      - name: Confirm frozen source remains unchanged
+        run: git diff --exit-code
+
+      - name: Upload final ${{ matrix.platform }} x64 artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: openchamber-lingxifox-1.0.1-${{ matrix.platform }}-x64
+          path: release-artifacts/${{ matrix.platform }}/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ fromJSON(inputs.retention_days) }}

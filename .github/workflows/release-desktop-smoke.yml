@@ -28,6 +28,11 @@ on:
         required: false
         default: true
         type: boolean
+      build_native_x64:
+        description: Build only native Windows x64 and Linux x64 release artifacts
+        required: false
+        default: false
+        type: boolean
       retention_days:
         description: Artifact retention days
         required: false
@@ -43,8 +48,14 @@ permissions:
   contents: read
 
 jobs:
+  build-native-x64:
+    if: ${{ inputs.build_native_x64 }}
+    uses: ./.github/workflows/release-native-x64.yml
+    with:
+      retention_days: ${{ inputs.retention_days }}
+
   build-macos-electron:
-    if: ${{ inputs.build_macos }}
+    if: ${{ inputs.build_macos && !inputs.build_native_x64 }}
     name: Build macOS Electron (${{ matrix.arch }})
     runs-on: macos-26
     strategy:
@@ -185,7 +196,7 @@ jobs:
           retention-days: ${{ fromJSON(inputs.retention_days) }}
 
   build-windows-electron:
-    if: ${{ inputs.build_windows }}
+    if: ${{ inputs.build_windows && !inputs.build_native_x64 }}
     name: Build Windows Electron (${{ matrix.arch }})
     # Match the production release workflow. windows-latest currently resolves
     # to a runner with Visual Studio 18, which this Electron/node-gyp stack does
@@ -279,7 +290,7 @@ jobs:
           retention-days: ${{ fromJSON(inputs.retention_days) }}
 
   build-linux-electron:
-    if: ${{ inputs.build_linux }}
+    if: ${{ inputs.build_linux && !inputs.build_native_x64 }}
     name: Build Linux Electron (${{ matrix.arch }})
     strategy:
       fail-fast: false
