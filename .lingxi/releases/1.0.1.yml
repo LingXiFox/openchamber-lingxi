@@ -32,32 +32,32 @@ targets:
   windows-x64: verified-actions-dry-run
   linux-x64: verified-actions-dry-run
 actions_dry_run:
-  run_id: 33067417764
-  run_url: https://github.com/LingXiFox/openchamber-lingxi/actions/runs/33067417764
-  source_commit: 110e5029c47d7335c32f2fa42299e4351505317b
-  source_tree: 4d6661feaa2f615ff1f5956e2be5e2135fedb6e7
+  run_id: 33072947155
+  run_url: https://github.com/LingXiFox/openchamber-lingxi/actions/runs/33072947155
+  source_commit: 17c1e86f275066919214bf239f69e54c947ed057
+  source_tree: 7a40132f7736df956fd4a8e8220ecf5eeb8f8361
   artifact_round_trip: PASS
   artifacts:
     - name: OpenChamber-LingXiFox-1.0.1-linux-x86_64.AppImage
-      bytes: 223833146
-      sha256: 9bf76dcc2275c98d3a233794768c333bf6012c41ac8f30041041b0f76f5dcaa0
-      updater_sha512: Y+AQhL04k3T+nhZot0UA7RKwSqU9+mvhrzy+Qxazd2a0hOOlYojS/6XV97NxcSUbzBqkvTEQAp0EhA0QPoLKQA==
+      bytes: 223833127
+      sha256: b716bc1d64d26f3878e516bfd2ee1ea4c35b4ae6d6b31b7f64f8d5ea762decb5
+      updater_sha512: 28cCo8nUliD0p+VxbMdT9E3GRH9/8zytgTiEFm6jbMKqrqq9qoMzFPnwHCHZ690E4zMC6b7R7tkFpwzOgQ3CIA==
     - name: OpenChamber-LingXiFox-1.0.1-win-x64.exe
-      bytes: 170299994
-      sha256: 819899397d349f4f1fb8c213767223f3b6762bb228e75e8e7ae07193a087f2cd
-      updater_sha512: uBioHiEvl2/z8cUWIaEMd/NiFTxH4FJOKCCOgrVcOhkcnfhKlAxsRw1LSw5adfEvK2bA71B1NtRKO/7GERjOng==
+      bytes: 170300466
+      sha256: 8cc8ddd0e37b3d5e5223aba56c17e282b4a52b0ad43aa25688d3317f14e509b9
+      updater_sha512: q4NS6fU3JngmLlAa5hb+KigqMFnkD64sBHjy6vL9DVTWFDNTTmRWfUN92d+LRa8v8/cHQygxMZg2bzOTeGrNUA==
     - name: OpenChamber-LingXiFox-1.0.1-win-x64.exe.blockmap
-      bytes: 177526
-      sha256: 3a366d537dbf0e3e412d2505c185cc84227aca899212635bf8a7ca683a63f9d7
+      bytes: 177461
+      sha256: ee449597108670923e0cd2821de8ec881e1e5e3a9f41e82e82a55a1c888a3939
     - name: latest-linux.yml
       bytes: 420
-      sha256: 880e5e5d6d08cc8ef19819cb4da60ecc49365bc1bcf54b0368f4aac4ad20b277
+      sha256: 46e8dfe37482821db81e15e2138f264a01f6b8cca3f4d1378a8372fcec3a757b
     - name: latest.yml
       bytes: 375
-      sha256: 4ff4daf448e9f36f501e335a6f3eb1bf2891e03f986567f5c0bd521bff8ee96c
+      sha256: d8ad4c6ec3934d7e06318150373676703bc3376db3127068f768eefe64e11009
     - name: SHA256SUMS.txt
       bytes: 497
-      sha256: 152a816b50a8274cb6745419917da77e732069982234e18e77070e0e22005345
+      sha256: 9d972a61c4ba86d112fe979d315b8b9fcf3e7851959e1db5c683d1aba631854a
 signing:
   macos: apple-development
   notarized: false
