@@ -112,10 +112,9 @@ jobs:
           ')
           canonical="integration/openchamber-lingxi-$version"
           if [ "$EVENT_NAME" = push ]; then
-            canonical_ref="origin/$canonical"
-            git show-ref --verify --quiet "refs/remotes/$canonical_ref" || canonical_ref="$canonical"
-            git merge-base --is-ancestor HEAD "$canonical_ref" || {
-              echo "Release tag must point at a commit on the canonical $canonical branch" >&2
+            git fetch --no-tags origin "refs/heads/$canonical:refs/remotes/origin/$canonical"
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/remotes/origin/$canonical")" || {
+              echo "Release tag must point at the tip of the canonical $canonical branch" >&2
               exit 1
             }
           elif [[ ",$targets," == *",macos-arm64,"* ]]; then
@@ -123,6 +122,11 @@ jobs:
               "$canonical"|"refs/heads/$canonical") ;;
               *) echo "macos-arm64 dry-runs must use the canonical $canonical branch" >&2; exit 1 ;;
             esac
+            git fetch --no-tags origin "refs/heads/$canonical:refs/remotes/origin/$canonical"
+            test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/remotes/origin/$canonical")" || {
+              echo "macos-arm64 dry-runs must use the tip of the canonical $canonical branch" >&2
+              exit 1
+            }
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
@@ -558,4 +562,5 @@ jobs:
           draft: false
           prerelease: ${{ contains(needs.preflight.outputs.version, '-') }}
           fail_on_unmatched_files: true
+          overwrite_files: false
           files: release-artifacts/*
