@@ -208,7 +208,7 @@ jobs:
             }
           };
           visit(root);
-          for (const required of ['pty.node', 'sherpa-onnx.node']) {
+          for (const required of ['conpty.node', 'conpty_console_list.node', 'sherpa-onnx.node']) {
             if (!modules.some((file) => path.basename(file) === required)) throw new Error(`Missing packaged native module: ${required}`);
           }
           for (const file of modules) {
