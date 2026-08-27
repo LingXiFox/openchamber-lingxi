@@ -17,12 +17,18 @@ let currentRecord: HookRecord | null = null;
 let hookIndex = 0;
 let pendingEffects: Array<() => void> = [];
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
 
 afterEach(() => {
   if (originalWindow) {
     Object.defineProperty(globalThis, 'window', originalWindow);
   } else {
     Reflect.deleteProperty(globalThis, 'window');
+  }
+  if (originalDocument) {
+    Object.defineProperty(globalThis, 'document', originalDocument);
+  } else {
+    Reflect.deleteProperty(globalThis, 'document');
   }
 });
 
@@ -51,6 +57,14 @@ const resetHarness = () => {
         return 0;
       },
       clearTimeout: () => undefined,
+      addEventListener: () => undefined,
+    },
+  });
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: {
+      visibilityState: 'visible',
+      addEventListener: () => undefined,
     },
   });
 };
@@ -113,6 +127,8 @@ function useEffect(effect: HookEffect, deps?: unknown[]): void {
   }
 }
 
+function useDebugValue(): void {}
+
 function useMemo<T>(factory: () => T, deps?: unknown[]): T {
   const record = getHookRecord();
   const index = hookIndex++;
@@ -151,6 +167,20 @@ function useState<T>(initialValue: T | (() => T)): readonly [T, (next: T | ((pre
   return [record.values[index] as T, setState] as const;
 }
 
+function useSyncExternalStore<T>(
+  subscribe: (onStoreChange: () => void) => () => void,
+  getSnapshot: () => T,
+  getServerSnapshot?: () => T,
+): T {
+  const record = getHookRecord();
+  const index = hookIndex++;
+  record.values[index] = typeof window === 'undefined' && getServerSnapshot ? getServerSnapshot() : getSnapshot();
+  useEffect(() => subscribe(() => {
+    record.values[index] = getSnapshot();
+  }), [subscribe, getSnapshot, index, record.values]);
+  return record.values[index] as T;
+}
+
 function jsx<P extends Record<string, unknown>>(type: JSXElementType<P>, props: JSXProps & P): unknown {
   if (type === reactJsxRuntime.Fragment) {
     return props.children ?? null;
@@ -165,10 +195,12 @@ function jsx<P extends Record<string, unknown>>(type: JSXElementType<P>, props: 
 
 const ReactMock = {
   useCallback,
+  useDebugValue,
   useEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 };
 
 const reactJsxRuntime = {
