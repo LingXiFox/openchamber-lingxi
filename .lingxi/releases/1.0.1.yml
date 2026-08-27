@@ -4,7 +4,7 @@ product:
   app_id: com.lingxifox.openchamber
 version: 1.0.1
 tag: lingxi-v1.0.1
-state: candidate
+state: ready
 upstream:
   tag: v1.21.0
   commit: ad7fd356339ccc5c9af5af1a6786662572d53ed0
@@ -29,8 +29,35 @@ migration:
   note: The macOS candidate predates the canonical anchor and does not carry a build commit attestation.
 targets:
   macos-arm64: verified-local-candidate
-  windows-x64: pending-actions-dry-run
-  linux-x64: pending-actions-dry-run
+  windows-x64: verified-actions-dry-run
+  linux-x64: verified-actions-dry-run
+actions_dry_run:
+  run_id: 33067417764
+  run_url: https://github.com/LingXiFox/openchamber-lingxi/actions/runs/33067417764
+  source_commit: 110e5029c47d7335c32f2fa42299e4351505317b
+  source_tree: 4d6661feaa2f615ff1f5956e2be5e2135fedb6e7
+  artifact_round_trip: PASS
+  artifacts:
+    - name: OpenChamber-LingXiFox-1.0.1-linux-x86_64.AppImage
+      bytes: 223833146
+      sha256: 9bf76dcc2275c98d3a233794768c333bf6012c41ac8f30041041b0f76f5dcaa0
+      updater_sha512: Y+AQhL04k3T+nhZot0UA7RKwSqU9+mvhrzy+Qxazd2a0hOOlYojS/6XV97NxcSUbzBqkvTEQAp0EhA0QPoLKQA==
+    - name: OpenChamber-LingXiFox-1.0.1-win-x64.exe
+      bytes: 170299994
+      sha256: 819899397d349f4f1fb8c213767223f3b6762bb228e75e8e7ae07193a087f2cd
+      updater_sha512: uBioHiEvl2/z8cUWIaEMd/NiFTxH4FJOKCCOgrVcOhkcnfhKlAxsRw1LSw5adfEvK2bA71B1NtRKO/7GERjOng==
+    - name: OpenChamber-LingXiFox-1.0.1-win-x64.exe.blockmap
+      bytes: 177526
+      sha256: 3a366d537dbf0e3e412d2505c185cc84227aca899212635bf8a7ca683a63f9d7
+    - name: latest-linux.yml
+      bytes: 420
+      sha256: 880e5e5d6d08cc8ef19819cb4da60ecc49365bc1bcf54b0368f4aac4ad20b277
+    - name: latest.yml
+      bytes: 375
+      sha256: 4ff4daf448e9f36f501e335a6f3eb1bf2891e03f986567f5c0bd521bff8ee96c
+    - name: SHA256SUMS.txt
+      bytes: 497
+      sha256: 152a816b50a8274cb6745419917da77e732069982234e18e77070e0e22005345
 signing:
   macos: apple-development
   notarized: false
