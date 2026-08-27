@@ -11,7 +11,7 @@ Use `.github/workflows/docs-source.yml`.
 Triggers:
 
 - push to `main` when docs source changes
-- release published
+- non-LingXi release published
 - manual `workflow_dispatch`
 
 Outputs:
@@ -20,6 +20,10 @@ Outputs:
 - creates `openchamber-docs-source-<sha>.tar.gz`
 - uploads archive as workflow artifact
 - on release/manual with tag, uploads archive to release assets
+
+`lingxi-v*` releases keep a closed desktop updater inventory, so release events
+for those tags skip this workflow. Use the manual trigger if a separate docs
+source archive is needed.
 
 ## Cross-repo sync trigger
 
