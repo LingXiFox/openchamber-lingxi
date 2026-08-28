@@ -8,14 +8,34 @@ Each release keeps a machine record under `.lingxi/releases/` and a human record
 
 ## Prepare
 
-Run the `LingXi Prepare Release` workflow for the matching `integration/openchamber-lingxi-X.Y.Z` branch. It accepts a LingXi version, changes only `packages/electron/package.json` and the matching `bun.lock` workspace entry, then opens a preparation PR. Preparation runs with a read-only token. A separate job receives only those two files and gets the write token needed to create the branch and PR.
+A new LingXi development cycle starts from the latest published LingXi product base.
 
-Before merging, add or update the release records and run:
+Create the canonical integration branch first:
 
 ```bash
-bun run release:lingxi:check
-bun run release:prepare
+git switch -c integration/openchamber-lingxi-X.Y.Z
 ```
+
+Immediately initialize the Electron product version for that development cycle:
+
+```bash
+node scripts/release/lingxi-release.mjs prepare X.Y.Z
+```
+
+This changes only `packages/electron/package.json` and the matching `bun.lock` workspace version. Commit those changes at the beginning of the development cycle.
+
+The canonical `integration/openchamber-lingxi-X.Y.Z` branch keeps that version throughout development. Do not defer the version bump until release day.
+
+Before release, run the `LingXi Prepare Release` workflow only as a lightweight verification step. It verifies that:
+
+- the selected branch is exactly `integration/openchamber-lingxi-X.Y.Z`
+- the Electron product version is already `X.Y.Z`
+- the release contract is valid
+- the workflow does not mutate the source tree
+
+The Prepare workflow does not modify source files, create temporary release branches, or open preparation pull requests.
+
+Before tagging, add or update the release records and run the required release checks described below.
 
 ## Secret scanning gate
 
