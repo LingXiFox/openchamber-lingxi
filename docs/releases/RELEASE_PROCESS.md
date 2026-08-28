@@ -59,13 +59,47 @@ Because `macos-arm64` receives signing and notarization secrets, manual macOS dr
 
 ## Publish
 
-Set the machine record state to `ready`, then create and push `lingxi-vX.Y.Z` only after source checks and native dry-runs pass. The tagged commit must belong to the matching canonical integration branch. A tag run builds all formal targets, compares each downloaded artifact set with its pre-upload content digest, writes `SHA256SUMS.txt`, and publishes only after every build succeeds. The publish job verifies the checksum file, every listed release file, and the exact inventory after downloading the assembled artifact.
+Set the machine release record state to `ready` only after the candidate source and required release checks are complete.
 
-LingXiFox 1.0.1 is a version-scoped transitional exception: its tag run builds and round-trips Windows and Linux only, then stops with an assembled Actions artifact. The release operator combines that artifact with the byte-verified local macOS staging set, discards the partial checksum file, generates a new full `SHA256SUMS.txt`, creates a Draft release, downloads every Draft asset into a clean directory, verifies the checksum and exact inventory, and only then publishes. Later versions retain the normal all-platform tag workflow.
+Create and push the `lingxi-vX.Y.Z` tag manually. The tag must point at the tip of the matching canonical `integration/openchamber-lingxi-X.Y.Z` branch.
 
-macOS signing and notarization secrets belong in a protected GitHub Environment. Never pass signing secrets to a workflow that can check out another repository or an arbitrary unreviewed ref. If required secrets are absent, the macOS job must fail before importing a certificate. The import step deletes its temporary certificate, and the job deletes its temporary signing keychain even after failure.
+The tag-triggered `LingXi Desktop Release` workflow does not publish a GitHub Release. It only:
 
-Windows builds are unsigned until a separate signing design is approved. Release notes must say so.
+- resolves the tag to an immutable Build Source commit
+- validates the release contract
+- builds the formal native targets
+- runs platform packaging and smoke checks
+- verifies updater manifests and blockmaps
+- verifies artifact upload/download digests
+- assembles the exact release inventory
+- generates `SHA256SUMS.txt`
+- uploads the complete assembled release as a GitHub Actions artifact
+
+After the workflow succeeds, the release operator manually downloads the assembled Actions artifact and creates the GitHub Draft Release for `lingxi-vX.Y.Z`.
+
+Before publishing, verify that the Draft Release contains exactly the intended release assets and verify `SHA256SUMS.txt`.
+
+On macOS:
+
+```bash
+shasum -a 256 -c SHA256SUMS.txt
+```
+
+On Linux:
+
+```bash
+sha256sum --check SHA256SUMS.txt
+```
+
+The checksum verification must pass against the downloaded Draft assets before publication.
+
+The release operator then publishes the Draft manually.
+
+Creating release tags, creating Draft Releases, and publishing Releases are human-controlled operations. Automation and coding agents must not perform these actions unless explicitly instructed by the release operator.
+
+macOS signing and notarization secrets belong in the protected `lingxi-release` GitHub Environment. They must only be exposed to the canonical reviewed release source. Temporary certificates and signing keychains must be removed after the build, including on failure.
+
+Windows builds remain unsigned until a separate signing design is approved, and release notes must state that.
 
 ## Retirement gate
 
