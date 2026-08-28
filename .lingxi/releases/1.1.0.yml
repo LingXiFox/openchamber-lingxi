@@ -1,0 +1,22 @@
+schema: 1
+
+product:
+  name: OpenChamber LingXiFox
+  app_id: com.lingxifox.openchamber
+
+version: 1.1.0
+tag: lingxi-v1.1.0
+state: development
+
+upstream:
+  tag: v1.21.0
+  commit: ad7fd356339ccc5c9af5af1a6786662572d53ed0
+
+targets:
+  macos-arm64: actions
+  windows-x64: actions
+  linux-x64: actions
+
+signing:
+  macos: ad-hoc
+  notarized: false
