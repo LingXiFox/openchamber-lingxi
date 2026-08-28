@@ -55,7 +55,7 @@ Current formal targets are:
 
 Do not add architectures or package targets without changing the release contract and records first.
 
-Because `macos-arm64` receives signing and notarization secrets, manual macOS dry-runs accept only the matching canonical integration branch. The protected `lingxi-release` environment remains the approval boundary. Windows and Linux dry-runs may use another exact ref because those jobs receive no release secrets or write token.
+Manual `macos-arm64` dry-runs accept only the matching canonical integration branch. The protected `lingxi-release` environment remains the approval boundary for formal macOS packaging. Windows and Linux dry-runs may use another exact ref. Release jobs receive no release write token.
 
 ## Publish
 
@@ -97,7 +97,7 @@ The release operator then publishes the Draft manually.
 
 Creating release tags, creating Draft Releases, and publishing Releases are human-controlled operations. Automation and coding agents must not perform these actions unless explicitly instructed by the release operator.
 
-macOS signing and notarization secrets belong in the protected `lingxi-release` GitHub Environment. They must only be exposed to the canonical reviewed release source. Temporary certificates and signing keychains must be removed after the build, including on failure.
+macOS builds use ad-hoc code signing and are not notarized by Apple. The release workflow requires no Apple signing certificate, private key, Apple ID, or notarization secret. Release notes must state that the macOS build is not notarized and may require manual approval by the user on first launch.
 
 Windows builds remain unsigned until a separate signing design is approved, and release notes must state that.
 

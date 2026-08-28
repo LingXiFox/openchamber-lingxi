@@ -368,45 +368,10 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           test "$(node -p 'process.arch')" = arm64
-      - name: Verify signing secrets
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          test -n "$APPLE_CERTIFICATE"
-          test -n "$APPLE_CERTIFICATE_PASSWORD"
-          test -n "$APPLE_ID"
-          test -n "$APPLE_PASSWORD"
-          test -n "$APPLE_TEAM_ID"
       - name: Install frozen dependencies
         run: bun install --frozen-lockfile
-      - name: Install Apple certificate
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-        run: |
-          set -euo pipefail
-          keychain="$RUNNER_TEMP/lingxi-signing.keychain-db"
-          certificate="$RUNNER_TEMP/lingxi-certificate.p12"
-          trap 'rm -f "$certificate"' EXIT
-          password=$(openssl rand -base64 32)
-          echo "::add-mask::$password"
-          security create-keychain -p "$password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$password" "$keychain"
-          printf '%s' "$APPLE_CERTIFICATE" | base64 -D > "$certificate"
-          security import "$certificate" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
-          security list-keychain -d user -s "$keychain"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain"
-      - name: Build signed and notarized macOS artifacts
+      - name: Build ad-hoc signed macOS artifacts
         working-directory: packages/electron
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           bun run build:web-assets
           bun run prepare:opencode-cli
@@ -415,21 +380,25 @@ jobs:
           bun run rebuild:native
           node ./scripts/package.mjs --mac --arm64 --publish=never
           bun run verify:opencode-cli:packaged
-      - name: Verify signing, updater configuration, and notarization
+      - name: Verify ad-hoc signing and updater configuration
         run: |
           set -euo pipefail
+
           app=$(find packages/electron/dist/mac-arm64 -maxdepth 2 -name '*.app' -print -quit)
           dmg=$(find packages/electron/dist -maxdepth 1 -name '*.dmg' -print -quit)
           zip=$(find packages/electron/dist -maxdepth 1 -name '*.zip' -print -quit)
+
           test -n "$app"
           test -n "$dmg"
           test -n "$zip"
+
           codesign --verify --deep --strict --verbose=4 "$app"
-          codesign --verify --verbose=4 "$dmg"
+          codesign -dv --verbose=4 "$app" 2> "$RUNNER_TEMP/codesign-info.txt"
+          grep -q 'Signature=adhoc' "$RUNNER_TEMP/codesign-info.txt"
+
           codesign -d --entitlements :- "$app" > "$RUNNER_TEMP/entitlements.plist" 2>&1
           grep -q 'com.apple.security.cs.disable-library-validation' "$RUNNER_TEMP/entitlements.plist"
-          xcrun stapler validate "$app"
-          xcrun stapler validate "$dmg"
+
           node packages/electron/scripts/verify-app-update.mjs "$app"
           node packages/electron/scripts/verify-app-update.mjs "$zip"
       - name: Smoke packaged macOS app
@@ -472,9 +441,6 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: ${{ fromJSON(needs.preflight.outputs.retention_days) }}
-      - name: Remove signing keychain
-        if: ${{ always() }}
-        run: security delete-keychain "$RUNNER_TEMP/lingxi-signing.keychain-db" || true
 
   assemble:
     needs: [preflight, windows-x64, linux-x64, macos-arm64]

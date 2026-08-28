@@ -24,7 +24,7 @@
   "desktopPrerequisites": [
     "Electron runtime dependencies installed via bun install",
     "Bun available for sidecar compilation",
-    "macOS: Xcode + build tools for notarized packaging",
+    "macOS: Xcode + build tools for ad-hoc signed packaging",
     "Windows: NSIS installed for installer creation",
     "Linux: native x64 or arm64 host (no cross-arch packaging); FUSE/libfuse2 to run AppImages, or APPIMAGE_EXTRACT_AND_RUN=1"
   ],
@@ -97,9 +97,10 @@
       },
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
+      "identity": "-",
       "entitlements": "resources/entitlements.mac.plist",
       "entitlementsInherit": "resources/entitlements.mac.plist",
-      "notarize": true,
+      "notarize": false,
       "target": [
         "dmg",
         "zip"
@@ -138,7 +139,7 @@
       "installerHeaderIcon": "resources/icons/icon.ico"
     },
     "dmg": {
-      "sign": true,
+      "sign": false,
       "title": "${productName} ${version}",
       "backgroundColor": "#FFFCF0",
       "iconSize": 100,
