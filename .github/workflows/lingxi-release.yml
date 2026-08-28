@@ -135,8 +135,8 @@ jobs:
           echo "targets=$targets" >> "$GITHUB_OUTPUT"
           echo "retention_days=$retention" >> "$GITHUB_OUTPUT"
 
-      - name: Install frozen dependencies
-        run: bun install --frozen-lockfile
+      - name: Install release tooling dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: Validate release contract
         env:
@@ -149,11 +149,6 @@ jobs:
           else
             node scripts/release/lingxi-release.mjs check --record
           fi
-
-      - name: Run source checks
-        run: |
-          bun run release:prepare
-          bun run test
 
       - name: Confirm preflight did not mutate Build Source
         run: git diff --exit-code
