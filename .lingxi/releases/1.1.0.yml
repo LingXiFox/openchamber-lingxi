@@ -20,3 +20,17 @@ targets:
 signing:
   macos: ad-hoc
   notarized: false
+
+actions_dry_run:
+  macos_ad_hoc:
+    run_id: 33134354381
+    run_url: https://github.com/LingXiFox/openchamber-lingxi/actions/runs/33134354381
+    source_commit: 4a6560c6292472167c49ae5125a6d79eeb960720
+    result: PASS
+    artifact_round_trip: PASS
+    native_actions_artifact:
+      name: lingxi-1.1.0-macos-arm64
+      digest: sha256:ec73cf959a4a8a9dfebeefd61470c03232a317674c0e1c92b65bb17df3d37a13
+    assembled_actions_artifact:
+      name: lingxi-1.1.0-release
+      digest: sha256:8ec2f1f5ed472f913990e37173ab0541dffcd96495d5b33ff35f6f1f6d27476e
